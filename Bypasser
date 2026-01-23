@@ -1,0 +1,187 @@
+--[[
+    Standalone Anticheat Bypass System
+    Based on Cobalt's bypass architecture
+]]
+
+local AnticheatBypass = {}
+
+-- Storage for hooked functions (so they can be restored later if needed)
+local HookedFunctions = {}
+
+-- Helper function to hook functions
+local function HookFunction(original, replacement)
+    if not hookfunction then
+        warn("Executor doesn't support hookfunction")
+        return original
+    end
+    
+    if isfunctionhooked and isfunctionhooked(original) then
+        return original -- Already hooked
+    end
+    
+    local success, result = pcall(hookfunction, original, replacement)
+    if success then
+        HookedFunctions[original] = result
+        return result
+    else
+        warn("Failed to hook function:", result)
+        return original
+    end
+end
+
+-- ========== ADONIS BYPASS ========== --
+local Adonis = {
+    Name = "Adonis",
+    Game = "*", -- Works on all games
+}
+
+local AdonisAnticheatThreads = {}
+
+function Adonis.Detect()
+    -- Check if executor has required functions
+    if not (getreg and getgc and isfunctionhooked) then
+        return false
+    end
+    
+    local AdonisDetected = false
+    
+    -- Search for Adonis anticheat threads
+    for _, thread in getreg() do
+        if typeof(thread) ~= "thread" then
+            continue
+        end
+        
+        local Source = debug.info(thread, 1, "s")
+        if Source and (Source:match(".Core.Anti") or Source:match(".Plugins.Anti_Cheat")) then
+            AdonisDetected = true
+            table.insert(AdonisAnticheatThreads, thread)
+        end
+    end
+    
+    return AdonisDetected
+end
+
+function Adonis.Bypass()
+    -- Step 1: Close all anticheat threads
+    for _, thread in AdonisAnticheatThreads do
+        pcall(coroutine.close, thread)
+    end
+    
+    -- Step 2: Find Adonis tables
+    local AdonisTables = {}
+    
+    if filtergc then
+        -- Use filtergc if available (more efficient)
+        local ContendorAdonisTables = filtergc("table", {
+            Keys = { "Detected", "RLocked" }
+        }, false)
+        
+        for _, AdonisTable in ContendorAdonisTables do
+            if typeof(rawget(AdonisTable, "Detected")) == "function" then
+                table.insert(AdonisTables, AdonisTable)
+            end
+        end
+    else
+        -- Fallback: Search through garbage collector
+        for _, Table in getgc(true) do
+            if typeof(Table) ~= "table" then
+                continue
+            end
+            
+            local IsAdonisOrigin = typeof(rawget(Table, "Detected")) == "function" 
+                and rawget(Table, "RLocked")
+                
+            if IsAdonisOrigin then
+                table.insert(AdonisTables, Table)
+            end
+        end
+    end
+    
+    -- Step 3: Hook all detection functions
+    for _, AdonisTable in AdonisTables do
+        for _, DetectionFunc in AdonisTable do
+            if typeof(DetectionFunc) ~= "function" or isfunctionhooked(DetectionFunc) then
+                continue
+            end
+            
+            HookFunction(DetectionFunc, function(action, info, nocrash)
+                coroutine.yield(coroutine.running())
+                return task.wait(9e9)
+            end)
+        end
+    end
+    
+    return true
+end
+
+-- ========== MAIN BYPASS SYSTEM ========== --
+
+-- List of all bypasses
+local Bypasses = {
+    Adonis,
+    -- Add more bypasses here
+}
+
+-- Main function to run bypasses
+function AnticheatBypass.Run()
+    local Result = {
+        Disabled = false,
+        Name = "N/A",
+        Success = false
+    }
+    
+    for _, BypassModule in ipairs(Bypasses) do
+        -- Check if this bypass is for the current game
+        local IsForThisGame = false
+        
+        if typeof(BypassModule.Game) == "table" then
+            IsForThisGame = table.find(BypassModule.Game, game.PlaceId) 
+                or table.find(BypassModule.Game, tostring(game.PlaceId))
+        elseif BypassModule.Game == "*" then
+            IsForThisGame = true
+        else
+            IsForThisGame = tostring(BypassModule.Game) == tostring(game.PlaceId)
+        end
+        
+        if not IsForThisGame then
+            continue
+        end
+        
+        -- Try to detect and bypass
+        local DetectSuccess, IsDetected = pcall(BypassModule.Detect)
+        
+        if DetectSuccess and IsDetected then
+            print("[Bypass] Detected:", BypassModule.Name)
+            
+            local BypassSuccess, BypassResult = pcall(BypassModule.Bypass)
+            
+            if BypassSuccess and BypassResult then
+                Result.Disabled = true
+                Result.Name = BypassModule.Name
+                Result.Success = true
+                print("[Bypass] Successfully bypassed:", BypassModule.Name)
+                break
+            else
+                warn("[Bypass] Failed to bypass:", BypassModule.Name)
+            end
+        end
+    end
+    
+    return Result
+end
+
+-- ========== USAGE ========== --
+
+-- Run the bypass system
+local BypassResult = AnticheatBypass.Run()
+
+if BypassResult.Success then
+    print("✓ Anticheat bypassed:", BypassResult.Name)
+else
+    print("⚠ No anticheat detected or bypass failed")
+end
+
+-- Your script code goes here
+-- ...
+
+return AnticheatBypass

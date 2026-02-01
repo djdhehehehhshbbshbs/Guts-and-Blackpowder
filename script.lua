@@ -1517,7 +1517,7 @@ local result = (function()
     task.wait(1)
     
     if ui.showSuccess then
-        ui:showSuccess("Keyless Mode ✓")
+        ui:showSuccess("Keyless Mode Cause Im So Tuff")
     end
     getgenv().SCRIPT_KEY = "KEYLESS"
     if ui.close then ui:close() end

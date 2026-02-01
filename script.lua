@@ -1507,20 +1507,7 @@ local result = (function()
         end
     end
 
-    local ui = UI.new(options)
-    ui:createUI()
-
-    if ui.setLoadingState then
-        ui:setLoadingState(true, "Checking verification...")
-    end
-
-    task.wait(1)
-    
-    if ui.showSuccess then
-        ui:showSuccess("Keyless Mode Cause Im So Tuff")
-    end
     getgenv().SCRIPT_KEY = "KEYLESS"
-    if ui.close then ui:close() end
     return getgenv().SCRIPT_KEY
 end)()
 

@@ -5,77 +5,12 @@ Junkie.provider = "Katchi-hub"
 
 local result = (function()
     getgenv().SCRIPT_KEY = nil
-    getgenv().UI_CLOSED = false
-    local Players = game:GetService("Players")
-    local TweenService = game:GetService("TweenService")
-    local UserInputService = game:GetService("UserInputService")
-    local Lighting = game:GetService("Lighting")
-    local Colors = {
-        background = Color3.fromRGB(13, 17, 23),
-        surface = Color3.fromRGB(22, 27, 34),
-        surfaceLight = Color3.fromRGB(30, 36, 44),
-        primary = Color3.fromRGB(88, 166, 255),
-        primaryDark = Color3.fromRGB(58, 136, 225),
-        primaryGlow = Color3.fromRGB(120, 180, 255),
-        accent = Color3.fromRGB(136, 87, 224),
-        success = Color3.fromRGB(47, 183, 117),
-        successDark = Color3.fromRGB(37, 153, 97),
-        successGlow = Color3.fromRGB(67, 203, 137),
-        error = Color3.fromRGB(248, 81, 73),
-        textPrimary = Color3.fromRGB(230, 237, 243),
-        textSecondary = Color3.fromRGB(139, 148, 158),
-        textMuted = Color3.fromRGB(110, 118, 129),
-        border = Color3.fromRGB(48, 54, 61),
-        borderLight = Color3.fromRGB(63, 71, 79),
-        glass = Color3.fromRGB(255, 255, 255),
-        neonBlue = Color3.fromRGB(0, 229, 255),
-        neonPurple = Color3.fromRGB(187, 134, 252)
-    }
     
-    local function hasFileSystemSupport()
-        local hasWritefile = pcall(function() return type(writefile) == "function" end)
-        local hasReadfile = pcall(function() return type(readfile) == "function" end)
-        local hasIsfile = pcall(function() return type(isfile) == "function" end)
-        return hasWritefile and hasReadfile and hasIsfile
-    end
-    
-    local fileSystemSupported = hasFileSystemSupport()
-    
-    local function saveVerifiedKey(key)
-        if not fileSystemSupported then return false end
-        local ok = pcall(function()
-            writefile("verified_key.txt", key)
-        end)
-        return ok
-    end
-    
-    local function loadVerifiedKey()
-        if not fileSystemSupported then 
-            return nil 
-        end
-        
-        local ok, content = pcall(function()
-            return readfile("verified_key.txt")
-        end)
-        
-        if not ok or not content then 
-            return nil 
-        end
-        return content
-    end
-    
-    local function clearSavedKey()
-        if not fileSystemSupported then return false end
-        local ok = pcall(function() delfile("verified_key.txt") end)
-        return ok
-    end
-    
-
-    local function loadUIFactory()
-        return function(Colors, Players, TweenService, UserInputService, Lighting)
-        local IconAssets = {
-            shield = 84528813312016,
-            x = 73070135088117,
+    -- Keyless mode - skip all UI
+    getgenv().SCRIPT_KEY = "KEYLESS"
+    return getgenv().SCRIPT_KEY
+end)()
+-- This file was protected using Luraph Obfuscator v14.5.2 [https://lura.ph/]
             key = 128426502701541,
             link = 73034596791310,
             check = 83827110621355

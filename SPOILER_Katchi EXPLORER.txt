@@ -1,0 +1,2557 @@
+--[[
+    ██╗  ██╗ █████╗ ████████╗ ██████╗██╗  ██╗██╗ EXPLORER
+    ██║ ██╔╝██╔══██╗╚══██╔══╝██╔════╝██║  ██║██║
+    █████╔╝ ███████║   ██║   ██║     ███████║██║
+    ██╔═██╗ ██╔══██║   ██║   ██║     ██╔══██║██║
+    ██║  ██╗██║  ██║   ██║   ╚██████╗██║  ██║██║
+    ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝
+]]
+
+local Executor = {}
+do
+
+    Executor.hookfunction = hookfunction or hook_function or replaceclosure or nil
+    Executor.hookmetamethod = hookmetamethod or hook_metamethod or hookmetamethod or nil
+    Executor.newcclosure = newcclosure or newCclosure or function(f) return f end
+    Executor.checkcaller = checkcaller or is_synapse_function or nil
+    Executor.getnamecallmethod = getnamecallmethod or get_namecall_method or nil
+    Executor.gethui = gethui or get_hidden_gui or nil
+    Executor.cloneref = cloneref or clone_ref or function(o) return o end
+    Executor.sethiddenproperty = sethiddenproperty or set_hidden_property or set_hidden_prop or nil
+    Executor.gethiddenproperty = gethiddenproperty or get_hidden_property or get_hidden_prop or nil
+    Executor.isourclosure = isourclosure or is_our_closure or checkclosure or nil
+    Executor.getgc = getgc or get_gc or nil
+    Executor.getinstances = getinstances or get_instances or nil
+    Executor.getnilinstances = getnilinstances or get_nil_instances or nil
+    Executor.fireclickdetector = fireclickdetector or click_detector or nil
+    Executor.getcallingscript = getcallingscript or get_calling_script or nil
+    Executor.setclipboard = setclipboard or toclipboard or set_clipboard or nil
+
+if syn then
+        Executor.protect_gui = syn.protect_gui
+        Executor.unprotect_gui = syn.unprotect_gui
+        Executor.is_cached = syn.is_cached
+        Executor.cache_replace = syn.cache_replace
+        Executor.cache_invalidate = syn.cache_invalidate
+    end
+
+function Executor.has(name)
+        return Executor[name] ~= nil and type(Executor[name]) == "function"
+    end
+end
+
+local CONFIG = {
+
+    Colors = {
+        Background = Color3.fromRGB(18, 18, 24),
+        BackgroundSecondary = Color3.fromRGB(25, 25, 35),
+        BackgroundTertiary = Color3.fromRGB(32, 32, 45),
+        Accent = Color3.fromRGB(138, 99, 210),
+        AccentHover = Color3.fromRGB(158, 119, 230),
+        AccentSecondary = Color3.fromRGB(99, 140, 210),
+        Text = Color3.fromRGB(240, 240, 245),
+        TextSecondary = Color3.fromRGB(160, 160, 175),
+        TextMuted = Color3.fromRGB(100, 100, 115),
+        Border = Color3.fromRGB(50, 50, 65),
+        Success = Color3.fromRGB(80, 200, 120),
+        Warning = Color3.fromRGB(230, 180, 80),
+        Error = Color3.fromRGB(230, 80, 80),
+        Scrollbar = Color3.fromRGB(60, 60, 80),
+        Selection = Color3.fromRGB(138, 99, 210, 0.3),
+    },
+
+    Font = Enum.Font.GothamMedium,
+    FontBold = Enum.Font.GothamBold,
+    FontCode = Enum.Font.Code,
+    CornerRadius = UDim.new(0, 8),
+    CornerRadiusSmall = UDim.new(0, 4),
+    AnimationSpeed = 0.2,
+
+    EntryHeight = 24,
+    IndentSize = 16,
+    IconSize = 16,
+
+    StealthMode = true,
+    DeferredLoading = true,
+    BatchSize = 50,
+    BatchDelay = 0.03,
+}
+
+local Stealth = {}
+local cloakedInstances = setmetatable({}, { __mode = "k" })
+do
+
+    local STEALTH_NAMES = {
+        "RobloxGui", "CoreGui", "PlayerListGui", "ChatWindowGui", "BubbleChatGui",
+        "PurchasePromptApp", "SettingsHub", "TopBarApp", "HealthBarGui", "BackpackScript",
+        "RbxCharacterSounds", "RbxCameraScript", "RbxControlScript", "TouchControlFrame",
+        "VoiceChatServiceManager", "RbxAnalytics", "PolicyService", "TeleportGui",
+        "NotificationFrame", "AvatarEditorGui", "EmotesMenuGui", "InspectMenu"
+    }
+
+    local STEALTH_CHILD_NAMES = {
+        "Frame", "Container", "Main", "Content", "Background", "Holder", "Wrapper",
+        "TopBar", "Panel", "MainFrame", "UIHolder", "Canvas", "Body", "Header"
+    }
+
+    local protectedInstances = setmetatable({}, { __mode = "k" })
+
+    function Stealth.GetRandomName()
+        return STEALTH_NAMES[math.random(1, #STEALTH_NAMES)] .. "_" .. math.random(10000, 99999)
+    end
+
+    function Stealth.GetRandomChildName()
+        return STEALTH_CHILD_NAMES[math.random(1, #STEALTH_CHILD_NAMES)] .. "_" .. math.random(1000, 9999)
+    end
+
+function Stealth.CloakInstance(instance)
+        if not instance or cloakedInstances[instance] then return end
+        cloakedInstances[instance] = true
+
+    end
+
+    function Stealth.ProtectInstance(instance)
+        if not instance or protectedInstances[instance] then return end
+        protectedInstances[instance] = true
+
+        cloakedInstances[instance] = true
+    end
+
+    function Stealth.ProtectAllChildren(parent)
+        if not parent then return end
+        task.defer(function()
+            pcall(function()
+                for _, child in ipairs(parent:GetDescendants()) do
+                    Stealth.ProtectInstance(child)
+                end
+            end)
+        end)
+    end
+
+    function Stealth.CreateProtectedGui()
+        local gui = Instance.new("ScreenGui")
+        gui.Name = Stealth.GetRandomName()
+        gui.ResetOnSpawn = false
+        gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        gui.DisplayOrder = 999999
+
+gui.DescendantAdded:Connect(function(desc)
+            task.defer(function()
+                pcall(function()
+
+                    cloakedInstances[desc] = true
+                end)
+            end)
+        end)
+
+local parented = false
+
+if not parented and Executor.has("gethui") then
+            pcall(function()
+                gui.Parent = Executor.gethui()
+                parented = true
+            end)
+        end
+
+if not parented and Executor.protect_gui then
+            pcall(function()
+                Executor.protect_gui(gui)
+                local pg = Executor.cloneref(game:GetService("Players")).LocalPlayer:WaitForChild("PlayerGui")
+                gui.Parent = pg
+                parented = true
+            end)
+        end
+
+if not parented then
+            pcall(function()
+                local coreGui = Executor.cloneref(game:GetService("CoreGui"))
+                gui.Parent = coreGui
+                parented = true
+            end)
+        end
+
+if not parented then
+            pcall(function()
+                local pg = Executor.cloneref(game:GetService("Players")).LocalPlayer:WaitForChild("PlayerGui")
+                gui.Parent = pg
+            end)
+        end
+
+Stealth.CloakInstance(gui)
+
+        return gui
+    end
+
+function Stealth.CloakEntireGui(gui)
+        if not gui then return end
+        cloakedInstances[gui] = true
+        pcall(function()
+            for _, desc in ipairs(gui:GetDescendants()) do
+                cloakedInstances[desc] = true
+            end
+        end)
+    end
+
+function Stealth.SetupIndexHook(guiToHide)
+
+    end
+
+function Stealth.SetupNamecallHook(mainGui)
+
+        Stealth.MainGui = mainGui
+    end
+
+    local HONEYPOT_PATTERNS = {"anti", "cheat", "detect", "security", "monitor", "logger", "trap", "honeypot", "bait", "check", "verify", "scan", "watch"}
+
+    function Stealth.IsHoneypot(instance)
+        if not instance then return false end
+        local name = ""
+        pcall(function() name = instance.Name:lower() end)
+        for _, pattern in ipairs(HONEYPOT_PATTERNS) do
+            if name:find(pattern) then return true end
+        end
+        return false
+    end
+
+function Stealth.GetDescendants(parent)
+        local results = {}
+        local ok, descendants = pcall(function() return parent:GetDescendants() end)
+        if ok and descendants then
+            for _, inst in ipairs(descendants) do
+                if not Stealth.IsHoneypot(inst) then
+                    table.insert(results, inst)
+                end
+            end
+        end
+        return results
+    end
+
+function Stealth.GetChildren(parent)
+        local results = {}
+        local ok, children = pcall(function() return parent:GetChildren() end)
+        if ok and children then
+            for _, inst in ipairs(children) do
+                if not Stealth.IsHoneypot(inst) then
+                    table.insert(results, inst)
+                end
+            end
+        end
+        return results
+    end
+end
+
+local cloneref = Executor.cloneref
+local Players = cloneref(game:GetService("Players"))
+local TweenService = cloneref(game:GetService("TweenService"))
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local RunService = cloneref(game:GetService("RunService"))
+local TextService = cloneref(game:GetService("TextService"))
+local CoreGui = cloneref(game:GetService("CoreGui"))
+local LocalPlayer = Players.LocalPlayer
+
+local UI = {}
+do
+    function UI.Create(className, properties, children)
+        local instance = Instance.new(className)
+        for prop, value in pairs(properties or {}) do
+            pcall(function() instance[prop] = value end)
+        end
+        for _, child in ipairs(children or {}) do
+            child.Parent = instance
+        end
+        return instance
+    end
+
+    function UI.Corner(radius)
+        return UI.Create("UICorner", { CornerRadius = radius or CONFIG.CornerRadius })
+    end
+
+    function UI.Padding(padding)
+        return UI.Create("UIPadding", {
+            PaddingTop = UDim.new(0, padding),
+            PaddingBottom = UDim.new(0, padding),
+            PaddingLeft = UDim.new(0, padding),
+            PaddingRight = UDim.new(0, padding),
+        })
+    end
+
+    function UI.Stroke(color, thickness)
+        return UI.Create("UIStroke", {
+            Color = color or CONFIG.Colors.Border,
+            Thickness = thickness or 1,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        })
+    end
+
+    function UI.Tween(instance, properties, duration)
+        local tween = TweenService:Create(
+            instance,
+            TweenInfo.new(duration or CONFIG.AnimationSpeed, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+            properties
+        )
+        tween:Play()
+        return tween
+    end
+
+    function UI.HoverEffect(button, hoverColor, normalColor)
+        button.MouseEnter:Connect(function()
+            UI.Tween(button, { BackgroundColor3 = hoverColor }, 0.15)
+        end)
+        button.MouseLeave:Connect(function()
+            UI.Tween(button, { BackgroundColor3 = normalColor }, 0.15)
+        end)
+    end
+
+    function UI.Ripple(button)
+        button.ClipsDescendants = true
+        button.MouseButton1Click:Connect(function()
+            local ripple = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = Color3.new(1, 1, 1),
+                BackgroundTransparency = 0.7,
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                Size = UDim2.new(0, 0, 0, 0),
+                Parent = button,
+            }, { UI.Corner(UDim.new(1, 0)) })
+
+            local size = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 2
+            UI.Tween(ripple, { Size = UDim2.new(0, size, 0, size), BackgroundTransparency = 1 }, 0.4)
+            task.delay(0.4, function() ripple:Destroy() end)
+        end)
+    end
+end
+
+local Icons = {}
+do
+
+    Icons.MapId = "rbxasset://textures/ClassImages.PNG"
+    Icons.IconSize = 16
+
+Icons.ClassIcons = {
+        ["Accessory"] = 32, ["Accoutrement"] = 32, ["AdService"] = 73,
+        ["Animation"] = 60, ["AnimationController"] = 60, ["AnimationTrack"] = 60, ["Animator"] = 60,
+        ["ArcHandles"] = 56, ["AssetService"] = 72, ["Attachment"] = 34,
+        ["Backpack"] = 20, ["BadgeService"] = 75, ["BallSocketConstraint"] = 89,
+        ["BillboardGui"] = 64, ["BinaryStringValue"] = 4, ["BindableEvent"] = 67, ["BindableFunction"] = 66,
+        ["BlockMesh"] = 8, ["BloomEffect"] = 90, ["BlurEffect"] = 90,
+        ["BodyAngularVelocity"] = 14, ["BodyForce"] = 14, ["BodyGyro"] = 14,
+        ["BodyPosition"] = 14, ["BodyThrust"] = 14, ["BodyVelocity"] = 14,
+        ["BoolValue"] = 4, ["BoxHandleAdornment"] = 54, ["BrickColorValue"] = 4,
+        ["Camera"] = 5, ["CFrameValue"] = 4, ["CharacterMesh"] = 60, ["Chat"] = 33,
+        ["ClickDetector"] = 41, ["CollectionService"] = 30, ["Color3Value"] = 4,
+        ["ColorCorrectionEffect"] = 90, ["ConeHandleAdornment"] = 54, ["Configuration"] = 58,
+        ["ContentProvider"] = 72, ["ContextActionService"] = 41, ["CoreGui"] = 46, ["CoreScript"] = 18,
+        ["CornerWedgePart"] = 1, ["CustomEvent"] = 4, ["CustomEventReceiver"] = 4,
+        ["CylinderHandleAdornment"] = 54, ["CylinderMesh"] = 8, ["CylindricalConstraint"] = 89,
+        ["Debris"] = 30, ["Decal"] = 7, ["Dialog"] = 62, ["DialogChoice"] = 63,
+        ["DoubleConstrainedValue"] = 4, ["Explosion"] = 36, ["FileMesh"] = 8,
+        ["Fire"] = 61, ["Flag"] = 38, ["FlagStand"] = 39, ["FloorWire"] = 4,
+        ["Folder"] = 70, ["ForceField"] = 37, ["Frame"] = 48, ["GamePassService"] = 19,
+        ["Glue"] = 34, ["GuiButton"] = 52, ["GuiMain"] = 47, ["GuiService"] = 47,
+        ["Handles"] = 53, ["HapticService"] = 84, ["Hat"] = 45, ["HingeConstraint"] = 89,
+        ["Hint"] = 33, ["HopperBin"] = 22, ["HttpService"] = 76, ["Humanoid"] = 9,
+        ["ImageButton"] = 52, ["ImageLabel"] = 49, ["InsertService"] = 72,
+        ["IntConstrainedValue"] = 4, ["IntValue"] = 4, ["JointInstance"] = 34, ["JointsService"] = 34,
+        ["Keyframe"] = 60, ["KeyframeSequence"] = 60, ["KeyframeSequenceProvider"] = 60,
+        ["Lighting"] = 13, ["LineHandleAdornment"] = 54, ["LocalScript"] = 18, ["LogService"] = 87,
+        ["MarketplaceService"] = 46, ["Message"] = 33, ["Model"] = 2, ["ModuleScript"] = 71,
+        ["Motor"] = 34, ["Motor6D"] = 34, ["MoveToConstraint"] = 89, ["NegateOperation"] = 78,
+        ["NetworkClient"] = 16, ["NetworkReplicator"] = 29, ["NetworkServer"] = 15,
+        ["NumberValue"] = 4, ["ObjectValue"] = 4, ["Pants"] = 44, ["ParallelRampPart"] = 1,
+        ["Part"] = 1, ["ParticleEmitter"] = 69, ["PartPairLasso"] = 57, ["PathfindingService"] = 37,
+        ["Platform"] = 35, ["Player"] = 12, ["PlayerGui"] = 46, ["Players"] = 21,
+        ["PlayerScripts"] = 82, ["PointLight"] = 13, ["PointsService"] = 83, ["Pose"] = 60,
+        ["PrismaticConstraint"] = 89, ["PrismPart"] = 1, ["PyramidPart"] = 1, ["RayValue"] = 4,
+        ["ReflectionMetadata"] = 86, ["RemoteEvent"] = 80, ["RemoteFunction"] = 79,
+        ["ReplicatedFirst"] = 72, ["ReplicatedStorage"] = 72, ["RightAngleRampPart"] = 1,
+        ["RocketPropulsion"] = 14, ["RodConstraint"] = 89, ["RopeConstraint"] = 89,
+        ["Rotate"] = 34, ["RotateP"] = 34, ["RotateV"] = 34, ["RunService"] = 66,
+        ["ScreenGui"] = 47, ["Script"] = 6, ["ScrollingFrame"] = 48, ["Seat"] = 35,
+        ["Selection"] = 55, ["SelectionBox"] = 54, ["SelectionPartLasso"] = 57,
+        ["SelectionPointLasso"] = 57, ["SelectionSphere"] = 54, ["ServerScriptService"] = 0,
+        ["ServerStorage"] = 74, ["Shirt"] = 43, ["ShirtGraphic"] = 40, ["SkateboardPlatform"] = 35,
+        ["Sky"] = 28, ["SlidingBallConstraint"] = 89, ["Smoke"] = 59, ["Snap"] = 34,
+        ["Sound"] = 11, ["SoundService"] = 31, ["Sparkles"] = 42, ["SpawnLocation"] = 25,
+        ["SpecialMesh"] = 8, ["SphereHandleAdornment"] = 54, ["SpotLight"] = 13,
+        ["SpringConstraint"] = 89, ["StarterCharacterScripts"] = 82, ["StarterGear"] = 20,
+        ["StarterGui"] = 46, ["StarterPack"] = 20, ["StarterPlayer"] = 88, ["StarterPlayerScripts"] = 82,
+        ["Status"] = 2, ["StringValue"] = 4, ["SunRaysEffect"] = 90, ["SurfaceGui"] = 64,
+        ["SurfaceLight"] = 13, ["SurfaceSelection"] = 55, ["Team"] = 24, ["Teams"] = 23,
+        ["TeleportService"] = 81, ["Terrain"] = 65, ["TerrainRegion"] = 65, ["TestService"] = 68,
+        ["TextBox"] = 51, ["TextButton"] = 51, ["TextLabel"] = 50, ["Texture"] = 10,
+        ["TextureTrail"] = 4, ["Tool"] = 17, ["TouchTransmitter"] = 37, ["TrussPart"] = 1,
+        ["UnionOperation"] = 77, ["UserInputService"] = 84, ["Vector3Value"] = 4,
+        ["VehicleSeat"] = 35, ["VelocityMotor"] = 34, ["WedgePart"] = 1, ["Weld"] = 34,
+        ["Workspace"] = 19, ["MeshPart"] = 1, ["WrapTarget"] = 4, ["WrapLayer"] = 4,
+        ["Beam"] = 4, ["Trail"] = 4, ["ProximityPrompt"] = 41, ["Highlight"] = 54,
+        ["UICorner"] = 48, ["UIGradient"] = 48, ["UIStroke"] = 48, ["UIPadding"] = 48,
+        ["UIListLayout"] = 48, ["UIGridLayout"] = 48, ["UITableLayout"] = 48,
+        ["ViewportFrame"] = 47, ["WorldModel"] = 2, ["DataModel"] = 19,
+    }
+
+Icons.ExplorerOrder = {
+
+        ["Workspace"] = 19,
+        ["Players"] = 20,
+        ["Lighting"] = 21,
+        ["MaterialService"] = 22,
+        ["ReplicatedFirst"] = 70,
+        ["ReplicatedStorage"] = 71,
+        ["ServerScriptService"] = 72,
+        ["ServerStorage"] = 73,
+        ["StarterGui"] = 46,
+        ["StarterPack"] = 74,
+        ["StarterPlayer"] = 88,
+        ["Teams"] = 23,
+        ["SoundService"] = 31,
+        ["TextChatService"] = 75,
+        ["Chat"] = 76,
+        ["LocalizationService"] = 77,
+        ["TestService"] = 68,
+        ["CoreGui"] = 47,
+        ["HttpService"] = 78,
+        ["RunService"] = 66,
+        ["UserInputService"] = 84,
+        ["TweenService"] = 79,
+        ["Debris"] = 80,
+        ["PathfindingService"] = 81,
+        ["CollectionService"] = 82,
+        ["PhysicsService"] = 83,
+        ["ProximityPromptService"] = 85,
+        ["MarketplaceService"] = 86,
+        ["PolicyService"] = 87,
+        ["TeleportService"] = 89,
+        ["InsertService"] = 90,
+        ["AssetService"] = 91,
+        ["Player"] = 100,
+
+        ["Folder"] = 92,
+        ["Model"] = 93,
+        ["Part"] = 94,
+        ["Script"] = 6,
+        ["LocalScript"] = 7,
+        ["ModuleScript"] = 8,
+    }
+
+Icons.DefaultIcon = 0
+
+function Icons.GetIndex(className)
+        return Icons.ClassIcons[className] or Icons.DefaultIcon
+    end
+
+function Icons.GetExplorerOrder(className)
+        return Icons.ExplorerOrder[className] or 9999
+    end
+
+function Icons.CreateIcon(className, parent)
+        local index = Icons.GetIndex(className)
+
+local icon = Instance.new("ImageLabel")
+        icon.Name = Stealth.GetRandomChildName()
+        icon.BackgroundTransparency = 1
+        icon.Image = Icons.MapId
+        icon.ImageRectOffset = Vector2.new(index * Icons.IconSize, 0)
+        icon.ImageRectSize = Vector2.new(Icons.IconSize, Icons.IconSize)
+        icon.ScaleType = Enum.ScaleType.Crop
+        icon.Size = UDim2.new(0, Icons.IconSize, 0, Icons.IconSize)
+
+        if parent then icon.Parent = parent end
+        return icon
+    end
+end
+
+local Explorer = {}
+do
+    Explorer.Nodes = {}
+    Explorer.Expanded = {}
+    Explorer.Selected = nil
+    Explorer.ScrollOffset = 0
+    Explorer.VisibleEntries = {}
+    Explorer.SearchQuery = ""
+
+    local nodeIdCounter = 0
+
+    function Explorer.CreateNode(instance, parent)
+        if not instance then return nil end
+        if Explorer.Nodes[instance] then return Explorer.Nodes[instance] end
+
+        nodeIdCounter = nodeIdCounter + 1
+        local node = {
+            Id = nodeIdCounter,
+            Instance = instance,
+            Parent = parent,
+            Children = {},
+            Expanded = false,
+            Depth = parent and (parent.Depth + 1) or 0,
+        }
+
+        Explorer.Nodes[instance] = node
+
+        if parent then
+            table.insert(parent.Children, node)
+        end
+
+        return node
+    end
+
+    function Explorer.RemoveNode(instance)
+        local node = Explorer.Nodes[instance]
+        if not node then return end
+
+if node.Parent then
+            for i, child in ipairs(node.Parent.Children) do
+                if child == node then
+                    table.remove(node.Parent.Children, i)
+                    break
+                end
+            end
+        end
+
+for _, child in ipairs(node.Children) do
+            Explorer.RemoveNode(child.Instance)
+        end
+
+        Explorer.Nodes[instance] = nil
+    end
+
+    function Explorer.BuildTree(root, parentNode, depth)
+        depth = depth or 0
+        if depth > 100 then return end
+
+        local node = Explorer.CreateNode(root, parentNode)
+        if not node then return end
+
+local children = Stealth.GetChildren(root)
+
+table.sort(children, function(a, b)
+            local classA, classB = "", ""
+            local nameA, nameB = "", ""
+            pcall(function() classA = a.ClassName end)
+            pcall(function() classB = b.ClassName end)
+            pcall(function() nameA = a.Name:lower() end)
+            pcall(function() nameB = b.Name:lower() end)
+
+            local orderA = Icons.GetExplorerOrder(classA)
+            local orderB = Icons.GetExplorerOrder(classB)
+
+            if orderA ~= orderB then
+                return orderA < orderB
+            else
+                return nameA < nameB
+            end
+        end)
+
+        for _, child in ipairs(children) do
+            Explorer.BuildTree(child, node, depth + 1)
+        end
+
+        return node
+    end
+
+    function Explorer.BuildTreeDeferred(root, callback)
+        task.spawn(function()
+            local queue = {{instance = root, parent = nil, depth = 0}}
+            local processed = 0
+
+            while #queue > 0 do
+                local item = table.remove(queue, 1)
+                local node = Explorer.CreateNode(item.instance, item.parent)
+
+                if node and item.depth < 50 then
+                    local children = Stealth.GetChildren(item.instance)
+                    for _, child in ipairs(children) do
+                        table.insert(queue, {instance = child, parent = node, depth = item.depth + 1})
+                    end
+                end
+
+                processed = processed + 1
+                if processed % CONFIG.BatchSize == 0 then
+                    task.wait(CONFIG.BatchDelay)
+                end
+            end
+
+            if callback then callback() end
+        end)
+    end
+
+    function Explorer.GetFlatTree()
+        local flat = {}
+        local searchQuery = Explorer.SearchQuery:lower()
+
+local function hasMatchingDescendant(node)
+            if not node then return false end
+
+            local name = ""
+            pcall(function() name = node.Instance.Name:lower() end)
+            if name:find(searchQuery, 1, true) then return true end
+
+for _, child in ipairs(node.Children) do
+                if hasMatchingDescendant(child) then return true end
+            end
+            return false
+        end
+
+        local function recurse(node)
+            if not node then return end
+
+if searchQuery ~= "" then
+                local name = ""
+                pcall(function() name = node.Instance.Name:lower() end)
+                local matches = name:find(searchQuery, 1, true)
+                local hasDescendantMatch = hasMatchingDescendant(node)
+
+if not matches and not hasDescendantMatch then return end
+            end
+
+            table.insert(flat, node)
+
+            if Explorer.Expanded[node.Instance] then
+
+                local sortedChildren = {}
+                for _, child in ipairs(node.Children) do
+                    table.insert(sortedChildren, child)
+                end
+                table.sort(sortedChildren, function(a, b)
+                    local nameA, nameB = "", ""
+                    pcall(function() nameA = a.Instance.Name:lower() end)
+                    pcall(function() nameB = b.Instance.Name:lower() end)
+                    return nameA < nameB
+                end)
+
+                for _, child in ipairs(sortedChildren) do
+                    recurse(child)
+                end
+            end
+        end
+
+local gameNode = Explorer.Nodes[game]
+        if gameNode then
+            recurse(gameNode)
+        end
+
+        return flat
+    end
+
+    function Explorer.Toggle(node)
+        if not node then return end
+        Explorer.Expanded[node.Instance] = not Explorer.Expanded[node.Instance]
+    end
+
+    function Explorer.Select(node)
+        Explorer.Selected = node
+    end
+
+    function Explorer.ExpandTo(instance)
+        local current = instance
+        while current and current ~= game do
+            local parent = nil
+            pcall(function() parent = current.Parent end)
+            if parent then
+                Explorer.Expanded[parent] = true
+            end
+            current = parent
+        end
+    end
+end
+
+local Properties = {}
+do
+    Properties.CurrentInstance = nil
+    Properties.PropertyList = {}
+
+    local PROPERTY_BLACKLIST = {
+        "Parent",
+    }
+
+    local COMMON_PROPERTIES = {
+        "Name", "ClassName", "Parent",
+        "Position", "Size", "CFrame", "Rotation", "Orientation",
+        "Color", "BrickColor", "Material", "Transparency", "Reflectance",
+        "Anchored", "CanCollide", "CanTouch", "CanQuery",
+        "Visible", "Enabled", "Active",
+        "Text", "TextColor3", "TextSize", "Font",
+        "BackgroundColor3", "BackgroundTransparency", "BorderColor3", "BorderSizePixel",
+        "Image", "ImageColor3", "ImageTransparency",
+        "Value",
+        "Velocity", "AssemblyLinearVelocity", "AssemblyAngularVelocity",
+        "Health", "MaxHealth", "WalkSpeed", "JumpPower",
+    }
+
+    function Properties.GetProperties(instance)
+        if not instance then return {} end
+
+        local props = {}
+
+for _, propName in ipairs(COMMON_PROPERTIES) do
+            local success, value = pcall(function()
+                return instance[propName]
+            end)
+            if success and value ~= nil then
+                table.insert(props, {
+                    Name = propName,
+                    Value = value,
+                    Type = typeof(value),
+                })
+            end
+        end
+
+        return props
+    end
+
+    function Properties.SetProperty(instance, propName, value)
+        if not instance then return false, "No instance" end
+
+        local success, err = pcall(function()
+            instance[propName] = value
+        end)
+
+        return success, err
+    end
+
+    function Properties.SetCurrentInstance(instance)
+        Properties.CurrentInstance = instance
+        Properties.PropertyList = Properties.GetProperties(instance)
+    end
+end
+
+local ScriptViewer = {}
+do
+    ScriptViewer.CurrentScript = nil
+    ScriptViewer.Source = ""
+    ScriptViewer.IsEditing = false
+
+local decompile = decompile or nil
+    local getscriptbytecode = getscriptbytecode or nil
+    local setclipboard = setclipboard or toclipboard or Executor.setclipboard or nil
+    local saveinstance = saveinstance or nil
+
+function ScriptViewer.CanDecompile()
+        return decompile ~= nil or getscriptbytecode ~= nil
+    end
+
+function ScriptViewer.GetSource(script)
+        if not script then return "-- No script selected" end
+
+        local className = ""
+        pcall(function() className = script.ClassName end)
+
+if className ~= "LocalScript" and className ~= "ModuleScript" and className ~= "Script" then
+            return "-- Not a script (" .. className .. ")"
+        end
+
+local source = nil
+
+pcall(function()
+            source = script.Source
+        end)
+
+if not source or source == "" then
+            if decompile then
+                local ok, result = pcall(function()
+                    return decompile(script)
+                end)
+                if ok and result then
+                    source = result
+                end
+            end
+        end
+
+if not source or source == "" then
+            if getscriptbytecode then
+                local ok, result = pcall(function()
+                    return getscriptbytecode(script)
+                end)
+                if ok and result then
+                    source = "-- Bytecode (cannot decompile):\n-- Length: " .. #result .. " bytes"
+                end
+            end
+        end
+
+        if not source or source == "" then
+            source = "-- Could not retrieve script source\n-- Make sure your executor supports decompile()"
+        end
+
+        return source
+    end
+
+function ScriptViewer.SetScript(script)
+        ScriptViewer.CurrentScript = script
+        ScriptViewer.Source = ScriptViewer.GetSource(script)
+        ScriptViewer.IsEditing = false
+    end
+
+function ScriptViewer.CopyToClipboard()
+        if setclipboard and ScriptViewer.Source then
+            pcall(function()
+                setclipboard(ScriptViewer.Source)
+            end)
+            return true
+        end
+        return false
+    end
+
+function ScriptViewer.SaveScript(filename)
+        if writefile then
+            pcall(function()
+                writefile(filename or "script.lua", ScriptViewer.Source)
+            end)
+            return true
+        end
+        return false
+    end
+end
+
+local KatchiExplorer = {}
+do
+    local mainGui = nil
+    local mainFrame = nil
+    local explorerFrame = nil
+    local propertiesFrame = nil
+    local explorerList = nil
+    local propertiesList = nil
+    local searchBox = nil
+    local isMinimized = false
+    local isDragging = false
+    local dragStart = nil
+    local startPos = nil
+    local currentDragInstance = nil
+    local dragGui = nil
+    local dragOutline = nil
+
+function KatchiExplorer.StartDrag(instance, startPosition)
+        if currentDragInstance then return end
+
+local parent = nil
+        pcall(function() parent = instance.Parent end)
+        if parent == game or instance:IsA("Player") then return end
+
+        currentDragInstance = instance
+
+dragGui = Instance.new("ScreenGui")
+        dragGui.Name = Stealth.GetRandomChildName()
+        dragGui.DisplayOrder = 999999
+        dragGui.Parent = mainGui.Parent
+
+        local dragLabel = UI.Create("Frame", {
+            Name = "DragLabel",
+            BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+            Size = UDim2.new(0, 150, 0, 24),
+            Position = UDim2.new(0, startPosition.X, 0, startPosition.Y - 36),
+            Parent = dragGui,
+        }, {
+            UI.Corner(CONFIG.CornerRadiusSmall),
+            UI.Stroke(CONFIG.Colors.Accent, 1),
+        })
+
+        local iconLabel = Icons.CreateIcon(instance.ClassName, dragLabel)
+        iconLabel.Position = UDim2.new(0, 4, 0, 4)
+
+        UI.Create("TextLabel", {
+            Name = "Name",
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 24, 0, 0),
+            Size = UDim2.new(1, -28, 1, 0),
+            Font = CONFIG.Font,
+            Text = instance.Name,
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Parent = dragLabel,
+        })
+
+dragOutline = UI.Create("Frame", {
+            Name = "DropOutline",
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            Visible = false,
+            Parent = explorerList,
+        }, {
+            UI.Create("Frame", { BackgroundColor3 = CONFIG.Colors.Accent, Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 0, 0), BorderSizePixel = 0 }),
+            UI.Create("Frame", { BackgroundColor3 = CONFIG.Colors.Accent, Size = UDim2.new(1, 0, 0, 2), Position = UDim2.new(0, 0, 1, -2), BorderSizePixel = 0 }),
+            UI.Create("Frame", { BackgroundColor3 = CONFIG.Colors.Accent, Size = UDim2.new(0, 2, 1, 0), Position = UDim2.new(0, 0, 0, 0), BorderSizePixel = 0 }),
+            UI.Create("Frame", { BackgroundColor3 = CONFIG.Colors.Accent, Size = UDim2.new(0, 2, 1, 0), Position = UDim2.new(1, -2, 0, 0), BorderSizePixel = 0 }),
+        })
+
+        local dropTarget = nil
+
+local moveConn = UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+
+                local guiInset = game:GetService("GuiService"):GetGuiInset()
+                dragLabel.Position = UDim2.new(0, input.Position.X + 10, 0, input.Position.Y - guiInset.Y + 10)
+
+dropTarget = nil
+                dragOutline.Visible = false
+
+                for _, child in ipairs(explorerList:GetChildren()) do
+                    if child:IsA("Frame") and child.Visible then
+                        local absPos = child.AbsolutePosition
+                        local absSize = child.AbsoluteSize
+                        local mouseY = input.Position.Y - guiInset.Y
+                        local mouseX = input.Position.X
+
+                        if mouseX >= absPos.X and mouseX <= absPos.X + absSize.X and
+                           mouseY >= absPos.Y and mouseY <= absPos.Y + absSize.Y then
+
+                            local targetInstance = child:GetAttribute("Instance")
+                            if not targetInstance then
+
+                                for inst, node in pairs(Explorer.Nodes) do
+                                    if node and node.Instance and child.Name == tostring(node.Id) then
+                                        targetInstance = inst
+                                        break
+                                    end
+                                end
+                            end
+
+                            if targetInstance and targetInstance ~= instance and targetInstance ~= parent then
+                                dropTarget = targetInstance
+                                dragOutline.Position = child.Position
+                                dragOutline.Size = child.Size
+                                dragOutline.Visible = true
+                            end
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+
+local releaseConn
+        releaseConn = UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                releaseConn:Disconnect()
+                moveConn:Disconnect()
+
+if dropTarget and currentDragInstance then
+                    pcall(function()
+                        currentDragInstance.Parent = dropTarget
+                    end)
+
+                    task.defer(function()
+                        Explorer.ExpandTo(currentDragInstance)
+                        KatchiExplorer.RefreshExplorer()
+                    end)
+                end
+
+if dragGui then dragGui:Destroy() dragGui = nil end
+                if dragOutline then dragOutline:Destroy() dragOutline = nil end
+                currentDragInstance = nil
+            end
+        end)
+    end
+
+    function KatchiExplorer.Init()
+
+        mainGui = Stealth.CreateProtectedGui()
+
+Stealth.SetupNamecallHook(mainGui)
+
+mainGui.DescendantAdded:Connect(function(desc)
+            cloakedInstances[desc] = true
+        end)
+
+task.defer(function()
+            task.wait(0.1)
+            pcall(function()
+                cloakedInstances[mainGui] = true
+                for _, desc in ipairs(mainGui:GetDescendants()) do
+                    cloakedInstances[desc] = true
+                end
+            end)
+        end)
+
+mainFrame = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            BackgroundColor3 = CONFIG.Colors.Background,
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            Size = UDim2.new(0, 800, 0, 500),
+            Parent = mainGui,
+        }, {
+            UI.Corner(),
+            UI.Stroke(),
+            UI.Create("UIGradient", {
+                Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(220, 220, 230)),
+                }),
+                Rotation = 90,
+            }),
+        })
+
+local titleBar = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+            Size = UDim2.new(1, 0, 0, 36),
+            Parent = mainFrame,
+        }, {
+            UI.Corner(),
+        })
+
+UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+            Position = UDim2.new(0, 0, 1, -8),
+            Size = UDim2.new(1, 0, 0, 8),
+            BorderSizePixel = 0,
+            Parent = titleBar,
+        })
+
+UI.Create("TextLabel", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 12, 0, 0),
+            Size = UDim2.new(0, 200, 1, 0),
+            Font = CONFIG.FontBold,
+            Text = "Katchi Explorer",
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 16,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = titleBar,
+        })
+
+local buttonsFrame = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(1, -100, 0, 0),
+            Size = UDim2.new(0, 100, 1, 0),
+            Parent = titleBar,
+        }, {
+            UI.Create("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                HorizontalAlignment = Enum.HorizontalAlignment.Right,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 4),
+            }),
+            UI.Padding(6),
+        })
+
+local originalPosition = UDim2.new(0.5, 0, 0.5, 0)
+        local minimizedPosition = nil
+        local minimizedBar = nil
+
+local minimizeBtn = UI.Create("TextButton", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.Warning,
+            Size = UDim2.new(0, 24, 0, 24),
+            Font = CONFIG.FontBold,
+            Text = "—",
+            TextColor3 = CONFIG.Colors.Background,
+            TextSize = 16,
+            Parent = buttonsFrame,
+        }, { UI.Corner(UDim.new(1, 0)) })
+
+        UI.Ripple(minimizeBtn)
+        minimizeBtn.MouseButton1Click:Connect(function()
+            isMinimized = true
+
+            minimizedPosition = mainFrame.Position
+
+mainFrame.Visible = false
+
+if not minimizedBar or not minimizedBar.Parent then
+                minimizedBar = UI.Create("Frame", {
+                    Name = Stealth.GetRandomChildName(),
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+                    Position = minimizedPosition,
+                    Size = UDim2.new(0, 180, 0, 32),
+                    Parent = mainGui,
+                }, {
+                    UI.Corner(),
+                    UI.Stroke(),
+                })
+
+local dragArea = UI.Create("Frame", {
+                    Name = Stealth.GetRandomChildName(),
+                    BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+                    BackgroundTransparency = 0.5,
+                    Position = UDim2.new(0, 4, 0, 4),
+                    Size = UDim2.new(0, 100, 1, -8),
+                    Parent = minimizedBar,
+                }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+UI.Create("TextLabel", {
+                    Name = Stealth.GetRandomChildName(),
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Font = CONFIG.FontBold,
+                    Text = "≡ Katchi",
+                    TextColor3 = CONFIG.Colors.TextSecondary,
+                    TextSize = 12,
+                    Parent = dragArea,
+                })
+
+local barDragging = false
+                local barDragStart = nil
+                local barStartPos = nil
+
+                dragArea.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        barDragging = true
+                        barDragStart = input.Position
+                        barStartPos = minimizedBar.Position
+                    end
+                end)
+
+                dragArea.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        barDragging = false
+                    end
+                end)
+
+                UserInputService.InputChanged:Connect(function(input)
+                    if barDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        local delta = input.Position - barDragStart
+                        minimizedBar.Position = UDim2.new(
+                            barStartPos.X.Scale, barStartPos.X.Offset + delta.X,
+                            barStartPos.Y.Scale, barStartPos.Y.Offset + delta.Y
+                        )
+                    end
+                end)
+
+local openBtn = UI.Create("TextButton", {
+                    Name = Stealth.GetRandomChildName(),
+                    BackgroundColor3 = CONFIG.Colors.Accent,
+                    Position = UDim2.new(1, -72, 0, 4),
+                    Size = UDim2.new(0, 68, 1, -8),
+                    Font = CONFIG.FontBold,
+                    Text = "Open",
+                    TextColor3 = CONFIG.Colors.Text,
+                    TextSize = 12,
+                    AutoButtonColor = true,
+                    Parent = minimizedBar,
+                }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+                UI.Ripple(openBtn)
+                openBtn.MouseButton1Click:Connect(function()
+                    isMinimized = false
+
+                    minimizedBar.Visible = false
+
+                    mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    mainFrame.Visible = true
+
+                    mainFrame.Size = UDim2.new(0, 700, 0, 440)
+                    UI.Tween(mainFrame, { Size = UDim2.new(0, 800, 0, 500) }, 0.15)
+                end)
+            else
+
+                minimizedBar.Position = minimizedPosition
+                minimizedBar.Visible = true
+            end
+        end)
+
+local closeBtn = UI.Create("TextButton", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.Error,
+            Size = UDim2.new(0, 24, 0, 24),
+            Font = CONFIG.FontBold,
+            Text = "×",
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 18,
+            Parent = buttonsFrame,
+        }, { UI.Corner(UDim.new(1, 0)) })
+
+        UI.Ripple(closeBtn)
+        closeBtn.MouseButton1Click:Connect(function()
+            mainGui:Destroy()
+        end)
+
+titleBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                isDragging = true
+                dragStart = input.Position
+                startPos = mainFrame.Position
+            end
+        end)
+
+        titleBar.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                isDragging = false
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+            if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                local newX = startPos.X.Offset + delta.X
+                local newY = startPos.Y.Offset + delta.Y
+
+local screenSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+                local frameSize = mainFrame.AbsoluteSize
+                local anchorOffset = mainFrame.AnchorPoint * frameSize
+
+local minVisible = 50
+                newX = math.clamp(newX, -anchorOffset.X + minVisible, screenSize.X - frameSize.X + anchorOffset.X - minVisible)
+                newY = math.clamp(newY, -anchorOffset.Y + minVisible, screenSize.Y - frameSize.Y + anchorOffset.Y - minVisible)
+
+                mainFrame.Position = UDim2.new(
+                    startPos.X.Scale, newX,
+                    startPos.Y.Scale, newY
+                )
+            end
+        end)
+
+local content = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 0, 0, 36),
+            Size = UDim2.new(1, 0, 1, -36),
+            Parent = mainFrame,
+        })
+
+local searchFrame = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+            Position = UDim2.new(0, 8, 0, 8),
+            Size = UDim2.new(0.5, -12, 0, 32),
+            Parent = content,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall), UI.Stroke() })
+
+        searchBox = UI.Create("TextBox", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 8, 0, 0),
+            Size = UDim2.new(1, -16, 1, 0),
+            Font = CONFIG.Font,
+            PlaceholderText = "Search instances...",
+            PlaceholderColor3 = CONFIG.Colors.TextMuted,
+            Text = "",
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ClearTextOnFocus = false,
+            Parent = searchFrame,
+        })
+
+        searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+            Explorer.SearchQuery = searchBox.Text
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+explorerFrame = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+            Position = UDim2.new(0, 8, 0, 48),
+            Size = UDim2.new(0.5, -12, 1, -56),
+            ClipsDescendants = true,
+            Parent = content,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall), UI.Stroke() })
+
+        explorerList = UI.Create("ScrollingFrame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 0, 0, 0),
+            Size = UDim2.new(1, 0, 1, 0),
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            ScrollBarThickness = 6,
+            ScrollBarImageColor3 = CONFIG.Colors.Scrollbar,
+            BorderSizePixel = 0,
+            Parent = explorerFrame,
+        }, {
+            UI.Create("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 2),
+            }),
+            UI.Padding(4),
+        })
+
+propertiesFrame = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+            Position = UDim2.new(0.5, 4, 0, 8),
+            Size = UDim2.new(0.5, -12, 1, -16),
+            ClipsDescendants = true,
+            Parent = content,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall), UI.Stroke() })
+
+UI.Create("TextLabel", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+            Size = UDim2.new(1, 0, 0, 24),
+            Font = CONFIG.FontBold,
+            Text = "  Properties",
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Parent = propertiesFrame,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+propertiesList = UI.Create("ScrollingFrame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 0, 0, 28),
+            Size = UDim2.new(1, 0, 1, -28),
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            ScrollBarThickness = 6,
+            ScrollBarImageColor3 = CONFIG.Colors.Scrollbar,
+            BorderSizePixel = 0,
+            Visible = true,
+            Parent = propertiesFrame,
+        }, {
+            UI.Create("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 1),
+            }),
+            UI.Padding(4),
+        })
+
+local contextMenu = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+            Position = UDim2.new(0, 0, 0, 0),
+            Size = UDim2.new(0, 180, 0, 0),
+            Visible = false,
+            ZIndex = 100,
+            Parent = mainGui,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall), UI.Stroke() })
+
+        local contextList = UI.Create("ScrollingFrame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            ScrollBarThickness = 4,
+            ScrollBarImageColor3 = CONFIG.Colors.Scrollbar,
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            Parent = contextMenu,
+        }, {
+            UI.Create("UIListLayout", {
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 1),
+            }),
+            UI.Padding(4),
+        })
+
+        local contextInstance = nil
+        local contextButtons = {}
+
+        local function createContextBtn(text, callback, condition)
+            local btn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+                BackgroundTransparency = 0.5,
+                Size = UDim2.new(1, -8, 0, 22),
+                Font = CONFIG.Font,
+                Text = text,
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 11,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = contextList,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+            UI.Create("UIPadding", { PaddingLeft = UDim.new(0, 8), Parent = btn })
+            btn.MouseEnter:Connect(function()
+                if btn.Active then
+                    UI.Tween(btn, { BackgroundTransparency = 0, BackgroundColor3 = CONFIG.Colors.Accent }, 0.1)
+                end
+            end)
+            btn.MouseLeave:Connect(function()
+                UI.Tween(btn, { BackgroundTransparency = 0.5, BackgroundColor3 = CONFIG.Colors.BackgroundTertiary }, 0.1)
+            end)
+            btn.MouseButton1Click:Connect(function()
+                if contextInstance and btn.Active then
+                    callback(contextInstance)
+                end
+                contextMenu.Visible = false
+            end)
+            table.insert(contextButtons, {btn = btn, condition = condition})
+            return btn
+        end
+
+        local function addSeparator()
+            local sep = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Border,
+                Size = UDim2.new(1, -16, 0, 1),
+                Parent = contextList,
+            })
+            return sep
+        end
+
+createContextBtn("Cut                    Ctrl+X", function(inst)
+            pcall(function()
+                local cloned = inst:Clone()
+                if cloned then
+                    _G.KatchiClipboard = {cloned}
+                end
+                inst:Destroy()
+            end)
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+        createContextBtn("Copy                 Ctrl+C", function(inst)
+            pcall(function()
+                local cloned = inst:Clone()
+                if cloned then
+                    _G.KatchiClipboard = {cloned}
+                end
+            end)
+        end)
+
+        createContextBtn("Paste Into      Ctrl+Shift+V", function(inst)
+            pcall(function()
+                if _G.KatchiClipboard then
+                    for _, obj in ipairs(_G.KatchiClipboard) do
+                        local cloned = obj:Clone()
+                        if cloned then
+                            cloned.Parent = inst
+                        end
+                    end
+                end
+            end)
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+        addSeparator()
+
+createContextBtn("Duplicate            Ctrl+D", function(inst)
+            pcall(function()
+                local cloned = inst:Clone()
+                if cloned then
+                    cloned.Parent = inst.Parent
+                end
+            end)
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+        createContextBtn("Delete                   Del", function(inst)
+            pcall(function() inst:Destroy() end)
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+        createContextBtn("Rename                  F2", function(inst)
+
+            local name = ""
+            pcall(function() name = inst.Name end)
+            if setclipboard or toclipboard then
+                pcall(function() (setclipboard or toclipboard)(name) end)
+            end
+        end)
+
+        addSeparator()
+
+createContextBtn("Group                Ctrl+G", function(inst)
+            pcall(function()
+                local model = Instance.new("Model")
+                model.Name = "Model"
+                model.Parent = inst.Parent
+                inst.Parent = model
+            end)
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+        createContextBtn("Ungroup             Ctrl+U", function(inst)
+            pcall(function()
+                if inst:IsA("Model") or inst:IsA("Folder") then
+                    local parent = inst.Parent
+                    for _, child in ipairs(inst:GetChildren()) do
+                        child.Parent = parent
+                    end
+                    inst:Destroy()
+                end
+            end)
+            KatchiExplorer.RefreshExplorer()
+        end, function(inst) return inst:IsA("Model") or inst:IsA("Folder") end)
+
+        addSeparator()
+
+createContextBtn("Select Children", function(inst)
+
+            local children = {}
+            pcall(function() children = inst:GetChildren() end)
+            for _, child in ipairs(children) do
+                Explorer.Select({Instance = child})
+            end
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+        createContextBtn("Jump to Parent", function(inst)
+            pcall(function()
+                local parent = inst.Parent
+                if parent then
+
+                    local ancestor = parent
+                    while ancestor and ancestor ~= game do
+                        local ancestorParent = nil
+                        pcall(function() ancestorParent = ancestor.Parent end)
+                        if ancestorParent then
+                            Explorer.Expanded[ancestorParent] = true
+                        end
+                        ancestor = ancestorParent
+                    end
+                    Explorer.Expanded[game] = true
+
+local parentNode = Explorer.Nodes[parent]
+                    if parentNode then
+                        Explorer.Select(parentNode)
+                    else
+                        Explorer.Select({Instance = parent})
+                    end
+                    Properties.SetCurrentInstance(parent)
+                    KatchiExplorer.RefreshExplorer()
+                    KatchiExplorer.RefreshProperties()
+                end
+            end)
+        end)
+
+createContextBtn("Clear Search & Jump", function(inst)
+
+            if searchBox then
+                searchBox.Text = ""
+            end
+            Explorer.SearchQuery = ""
+
+local ancestor = inst
+            while ancestor and ancestor ~= game do
+                local ancestorParent = nil
+                pcall(function() ancestorParent = ancestor.Parent end)
+                if ancestorParent then
+                    Explorer.Expanded[ancestorParent] = true
+                end
+                ancestor = ancestorParent
+            end
+            Explorer.Expanded[game] = true
+
+local node = Explorer.Nodes[inst]
+            if node then
+                Explorer.Select(node)
+            else
+                Explorer.Select({Instance = inst})
+            end
+            Properties.SetCurrentInstance(inst)
+            KatchiExplorer.RefreshExplorer()
+            KatchiExplorer.RefreshProperties()
+        end, function() return Explorer.SearchQuery ~= "" end)
+
+        addSeparator()
+
+createContextBtn("Teleport To", function(inst)
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    if inst:IsA("BasePart") then
+                        char.HumanoidRootPart.CFrame = inst.CFrame + Vector3.new(0, 3, 0)
+                    elseif inst:IsA("Model") then
+                        local primary = inst.PrimaryPart or inst:FindFirstChildOfClass("BasePart")
+                        if primary then
+                            char.HumanoidRootPart.CFrame = primary.CFrame + Vector3.new(0, 3, 0)
+                        end
+                    end
+                end
+            end)
+        end, function(inst) return inst:IsA("BasePart") or inst:IsA("Model") end)
+
+        addSeparator()
+
+createContextBtn("View Script", function(inst)
+            if KatchiExplorer.OpenScriptViewer then
+                KatchiExplorer.OpenScriptViewer(inst)
+            end
+        end, function(inst) return inst:IsA("LuaSourceContainer") end)
+
+        createContextBtn("Save Script", function(inst)
+            pcall(function()
+                local source = ScriptViewer.GetSource(inst)
+                if writefile then
+                    writefile(inst.Name .. ".lua", source)
+                end
+            end)
+        end, function(inst) return inst:IsA("LuaSourceContainer") and writefile ~= nil end)
+
+        addSeparator()
+
+createContextBtn("Fire TouchInterest", function(inst)
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char and firetouchinterest then
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    if hrp and inst:IsA("BasePart") then
+                        firetouchinterest(hrp, inst, 0)
+                        task.wait(0.1)
+                        firetouchinterest(hrp, inst, 1)
+                    end
+                end
+            end)
+        end, function(inst) return inst:IsA("BasePart") and firetouchinterest ~= nil end)
+
+        createContextBtn("Fire ClickDetector", function(inst)
+            pcall(function()
+                if fireclickdetector then
+                    local cd = inst:IsA("ClickDetector") and inst or inst:FindFirstChildOfClass("ClickDetector")
+                    if cd then fireclickdetector(cd) end
+                end
+            end)
+        end, function(inst) return (inst:IsA("ClickDetector") or inst:FindFirstChildOfClass("ClickDetector")) and fireclickdetector ~= nil end)
+
+        createContextBtn("Fire ProximityPrompt", function(inst)
+            pcall(function()
+                if fireproximityprompt then
+                    local pp = inst:IsA("ProximityPrompt") and inst or inst:FindFirstChildOfClass("ProximityPrompt")
+                    if pp then fireproximityprompt(pp) end
+                end
+            end)
+        end, function(inst) return (inst:IsA("ProximityPrompt") or inst:FindFirstChildOfClass("ProximityPrompt")) and fireproximityprompt ~= nil end)
+
+        addSeparator()
+
+createContextBtn("Copy Path", function(inst)
+            local path = {}
+            local current = inst
+            while current and current ~= game do
+                local name = ""
+                pcall(function() name = current.Name end)
+
+                if name:match("^[%a_][%w_]*$") then
+                    table.insert(path, 1, name)
+                else
+                    table.insert(path, 1, '["' .. name:gsub('"', '\\"') .. '"]')
+                end
+                pcall(function() current = current.Parent end)
+            end
+            local pathStr = "game"
+            for _, part in ipairs(path) do
+                if part:sub(1, 1) == "[" then
+                    pathStr = pathStr .. part
+                else
+                    pathStr = pathStr .. "." .. part
+                end
+            end
+            if setclipboard or toclipboard then
+                pcall(function() (setclipboard or toclipboard)(pathStr) end)
+            end
+        end)
+
+        addSeparator()
+
+createContextBtn("Save to File", function(inst)
+            pcall(function()
+                if saveinstance then
+                    saveinstance(inst)
+                end
+            end)
+        end, function() return saveinstance ~= nil end)
+
+local btnCount = #contextList:GetChildren() - 2
+        contextMenu.Size = UDim2.new(0, 180, 0, math.min(btnCount * 23 + 10, 400))
+
+local function showContextMenu(instance, position)
+            contextInstance = instance
+
+for _, item in ipairs(contextButtons) do
+                local btn = item.btn
+                local condition = item.condition
+
+                if condition then
+                    local enabled = false
+                    pcall(function()
+                        enabled = condition(instance)
+                    end)
+
+                    btn.Active = enabled
+                    btn.TextColor3 = enabled and CONFIG.Colors.Text or CONFIG.Colors.TextSecondary
+                    btn.TextTransparency = enabled and 0 or 0.5
+                else
+                    btn.Active = true
+                    btn.TextColor3 = CONFIG.Colors.Text
+                    btn.TextTransparency = 0
+                end
+            end
+
+local screenSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+            local menuSize = contextMenu.AbsoluteSize
+
+local guiInset = game:GetService("GuiService"):GetGuiInset()
+            local posX = position.X
+            local posY = position.Y - guiInset.Y
+
+if posX + menuSize.X > screenSize.X then
+                posX = screenSize.X - menuSize.X - 5
+            end
+            if posY + menuSize.Y > screenSize.Y - guiInset.Y then
+                posY = screenSize.Y - menuSize.Y - guiInset.Y - 5
+            end
+            if posX < 0 then posX = 5 end
+            if posY < 0 then posY = 5 end
+
+            contextMenu.Position = UDim2.new(0, posX, 0, posY)
+            contextMenu.Visible = true
+        end
+
+UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                task.defer(function()
+                    task.wait(0.1)
+                    if contextMenu.Visible then
+                        local mouse = UserInputService:GetMouseLocation()
+                        local menuPos = contextMenu.AbsolutePosition
+                        local menuSize = contextMenu.AbsoluteSize
+                        if mouse.X < menuPos.X or mouse.X > menuPos.X + menuSize.X or
+                           mouse.Y < menuPos.Y or mouse.Y > menuPos.Y + menuSize.Y then
+                            contextMenu.Visible = false
+                        end
+                    end
+                end)
+            end
+        end)
+
+KatchiExplorer.ContextMenu = contextMenu
+        KatchiExplorer.ShowContextMenu = showContextMenu
+
+local scriptViewerPopup = nil
+
+        local function openScriptViewer(script)
+
+            if scriptViewerPopup then
+                pcall(function() scriptViewerPopup:Destroy() end)
+            end
+
+local executorName = "Unknown"
+            pcall(function()
+                if identifyexecutor then executorName = identifyexecutor()
+                elseif getexecutorname then executorName = getexecutorname() end
+            end)
+
+local source = ScriptViewer.GetSource(script)
+            local scriptName = ""
+            pcall(function() scriptName = script.Name end)
+
+local header = "\n\n"
+            source = header .. source
+
+scriptViewerPopup = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = CONFIG.Colors.Background,
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                Size = UDim2.new(0, 600, 0, 450),
+                ZIndex = 200,
+                Parent = mainGui,
+            }, { UI.Corner(), UI.Stroke() })
+
+local popupTitle = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+                Size = UDim2.new(1, 0, 0, 32),
+                Parent = scriptViewerPopup,
+            }, { UI.Corner() })
+
+            UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+                Position = UDim2.new(0, 0, 1, -8),
+                Size = UDim2.new(1, 0, 0, 8),
+                BorderSizePixel = 0,
+                Parent = popupTitle,
+            })
+
+            UI.Create("TextLabel", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 12, 0, 0),
+                Size = UDim2.new(1, -100, 1, 0),
+                Font = CONFIG.FontBold,
+                Text = "Script: " .. scriptName,
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextTruncate = Enum.TextTruncate.AtEnd,
+                Parent = popupTitle,
+            })
+
+local popupClose = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Error,
+                Position = UDim2.new(1, -32, 0, 4),
+                Size = UDim2.new(0, 24, 0, 24),
+                Font = CONFIG.FontBold,
+                Text = "X",
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 14,
+                Parent = popupTitle,
+            }, { UI.Corner(UDim.new(1, 0)) })
+
+            popupClose.MouseButton1Click:Connect(function()
+                scriptViewerPopup:Destroy()
+                scriptViewerPopup = nil
+            end)
+
+local toolbar = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+                Position = UDim2.new(0, 4, 0, 36),
+                Size = UDim2.new(1, -8, 0, 28),
+                Parent = scriptViewerPopup,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+            local copyBtn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Accent,
+                Position = UDim2.new(0, 4, 0, 2),
+                Size = UDim2.new(0, 60, 0, 24),
+                Font = CONFIG.Font,
+                Text = "Copy",
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 11,
+                Parent = toolbar,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+            copyBtn.MouseButton1Click:Connect(function()
+                if setclipboard or toclipboard then
+                    pcall(function() (setclipboard or toclipboard)(source) end)
+                    copyBtn.Text = "Copied!"
+                    task.delay(1, function() copyBtn.Text = "Copy" end)
+                end
+            end)
+
+            local saveBtn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Success,
+                Position = UDim2.new(0, 68, 0, 2),
+                Size = UDim2.new(0, 60, 0, 24),
+                Font = CONFIG.Font,
+                Text = "Save",
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 11,
+                Parent = toolbar,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+            saveBtn.MouseButton1Click:Connect(function()
+                if writefile then
+                    pcall(function() writefile(scriptName .. ".lua", source) end)
+                    saveBtn.Text = "Saved!"
+                    task.delay(1, function() saveBtn.Text = "Save" end)
+                end
+            end)
+
+            local execBtn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Warning,
+                Position = UDim2.new(0, 132, 0, 2),
+                Size = UDim2.new(0, 70, 0, 24),
+                Font = CONFIG.Font,
+                Text = "Execute",
+                TextColor3 = CONFIG.Colors.Background,
+                TextSize = 11,
+                Parent = toolbar,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+local scrollFrame = UI.Create("ScrollingFrame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Background,
+                Position = UDim2.new(0, 4, 0, 68),
+                Size = UDim2.new(1, -8, 1, -72),
+                CanvasSize = UDim2.new(0, 0, 0, 0),
+                ScrollBarThickness = 6,
+                ScrollBarImageColor3 = CONFIG.Colors.Scrollbar,
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                Parent = scriptViewerPopup,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+            local scriptBox = UI.Create("TextBox", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -16, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                Font = CONFIG.FontCode,
+                Text = source,
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                ClearTextOnFocus = false,
+                MultiLine = true,
+                TextWrapped = false,
+                RichText = false,
+                Parent = scrollFrame,
+            }, { UI.Padding(8) })
+
+            execBtn.MouseButton1Click:Connect(function()
+                local fn, err = loadstring(scriptBox.Text)
+                if fn then
+                    task.spawn(fn)
+                    execBtn.Text = "Done!"
+                else
+                    execBtn.Text = "Error"
+                    warn("Script error: " .. tostring(err))
+                end
+                task.delay(1, function() execBtn.Text = "Execute" end)
+            end)
+
+local popupDragging = false
+            local popupDragStart = nil
+            local popupStartPos = nil
+
+            popupTitle.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    popupDragging = true
+                    popupDragStart = input.Position
+                    popupStartPos = scriptViewerPopup.Position
+                end
+            end)
+
+            popupTitle.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    popupDragging = false
+                end
+            end)
+
+            local dragConnection
+            dragConnection = UserInputService.InputChanged:Connect(function(input)
+                if not scriptViewerPopup or not scriptViewerPopup.Parent then
+                    dragConnection:Disconnect()
+                    return
+                end
+                if popupDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    local delta = input.Position - popupDragStart
+                    scriptViewerPopup.Position = UDim2.new(
+                        popupStartPos.X.Scale, popupStartPos.X.Offset + delta.X,
+                        popupStartPos.Y.Scale, popupStartPos.Y.Offset + delta.Y
+                    )
+                end
+            end)
+        end
+
+        KatchiExplorer.OpenScriptViewer = openScriptViewer
+
+task.defer(function()
+            task.wait(0.5)
+
+Explorer.CreateNode(game, nil)
+            Explorer.Expanded[game] = true
+
+local gameChildren = {}
+            pcall(function()
+                gameChildren = game:GetChildren()
+            end)
+
+table.sort(gameChildren, function(a, b)
+                local classA, classB = "", ""
+                local nameA, nameB = "", ""
+                pcall(function() classA = a.ClassName end)
+                pcall(function() classB = b.ClassName end)
+                pcall(function() nameA = a.Name:lower() end)
+                pcall(function() nameB = b.Name:lower() end)
+
+                local orderA = Icons.GetExplorerOrder(classA)
+                local orderB = Icons.GetExplorerOrder(classB)
+
+                if orderA ~= orderB then
+                    return orderA < orderB
+                else
+                    return nameA < nameB
+                end
+            end)
+
+local BATCH_SIZE = 50
+            local processed = 0
+
+            for _, child in ipairs(gameChildren) do
+                if Stealth.IsHoneypot(child) then continue end
+
+local serviceNode = Explorer.CreateNode(child, Explorer.Nodes[game])
+                if serviceNode then
+
+                    local descendants = {}
+                    pcall(function()
+                        descendants = child:GetDescendants()
+                    end)
+
+                    for _, desc in ipairs(descendants) do
+                        if Stealth.IsHoneypot(desc) then continue end
+
+                        local parent = nil
+                        pcall(function() parent = desc.Parent end)
+                        if parent then
+                            local parentNode = Explorer.Nodes[parent]
+                            if parentNode then
+                                Explorer.CreateNode(desc, parentNode)
+                            end
+                        end
+
+                        processed = processed + 1
+                        if processed % BATCH_SIZE == 0 then
+                            task.wait()
+                        end
+                    end
+                end
+
+                task.wait()
+            end
+
+for _, node in pairs(Explorer.Nodes) do
+                if node.Children and #node.Children > 1 then
+                    table.sort(node.Children, function(a, b)
+                        local classA, classB = "", ""
+                        local nameA, nameB = "", ""
+                        pcall(function() classA = a.Instance.ClassName end)
+                        pcall(function() classB = b.Instance.ClassName end)
+                        pcall(function() nameA = a.Instance.Name:lower() end)
+                        pcall(function() nameB = b.Instance.Name:lower() end)
+
+                        local orderA = Icons.GetExplorerOrder(classA)
+                        local orderB = Icons.GetExplorerOrder(classB)
+
+                        if orderA ~= orderB then
+                            return orderA < orderB
+                        else
+                            return nameA < nameB
+                        end
+                    end)
+                end
+            end
+
+            KatchiExplorer.RefreshExplorer()
+        end)
+
+task.defer(function()
+            task.wait(2)
+            game.DescendantAdded:Connect(function(instance)
+                task.defer(function()
+                    if Stealth.IsHoneypot(instance) then return end
+                    local parent = nil
+                    pcall(function() parent = instance.Parent end)
+                    local parentNode = parent and Explorer.Nodes[parent]
+                    if parentNode then
+                        Explorer.CreateNode(instance, parentNode)
+                    end
+                end)
+            end)
+
+            game.DescendantRemoving:Connect(function(instance)
+                task.defer(function()
+                    Explorer.RemoveNode(instance)
+                end)
+            end)
+        end)
+
+        print("[Katchi Explorer v2.1] Loaded!")
+        print("   - Press RightControl to toggle visibility")
+        print("   - Right-click for actions, Double-click scripts to view")
+        print("   - UI Protection: " .. (Executor.has("hookmetamethod") and "FULL" or "BASIC"))
+        print("   - Script Decompile: " .. (ScriptViewer.CanDecompile() and "YES" or "NO"))
+
+UserInputService.InputBegan:Connect(function(input, processed)
+            if processed then return end
+            if input.KeyCode == Enum.KeyCode.RightControl then
+                mainGui.Enabled = not mainGui.Enabled
+            end
+        end)
+    end
+
+    function KatchiExplorer.CreateExplorerEntry(node, layoutOrder)
+        local instance = node.Instance
+        local name = ""
+        local className = ""
+        pcall(function() name = instance.Name end)
+        pcall(function() className = instance.ClassName end)
+
+        local hasChildren = #node.Children > 0
+        local isExpanded = Explorer.Expanded[instance]
+        local isSelected = Explorer.Selected == node
+
+        local entry = UI.Create("Frame", {
+            Name = tostring(node.Id),
+            BackgroundColor3 = isSelected and CONFIG.Colors.Accent or CONFIG.Colors.BackgroundSecondary,
+            BackgroundTransparency = isSelected and 0.7 or 1,
+            Size = UDim2.new(1, -8, 0, CONFIG.EntryHeight),
+            LayoutOrder = layoutOrder,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+entry:SetAttribute("InstancePath", instance:GetFullName())
+
+local indent = node.Depth * CONFIG.IndentSize
+
+if hasChildren then
+            local expandBtn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, indent, 0, 0),
+                Size = UDim2.new(0, CONFIG.EntryHeight, 0, CONFIG.EntryHeight),
+                Font = CONFIG.Font,
+                Text = isExpanded and "v" or ">",
+                TextColor3 = CONFIG.Colors.TextSecondary,
+                TextSize = 10,
+                Parent = entry,
+            })
+
+            expandBtn.MouseButton1Click:Connect(function()
+                Explorer.Toggle(node)
+                KatchiExplorer.RefreshExplorer()
+            end)
+        end
+
+local iconLabel = Icons.CreateIcon(className, entry)
+        iconLabel.Position = UDim2.new(0, indent + CONFIG.EntryHeight + 2, 0, 4)
+
+local nameLabel = UI.Create("TextLabel", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, indent + CONFIG.EntryHeight + 22, 0, 0),
+            Size = UDim2.new(1, -(indent + CONFIG.EntryHeight + 22), 0, CONFIG.EntryHeight),
+            Font = CONFIG.Font,
+            Text = name,
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Parent = entry,
+        })
+
+local clickArea = UI.Create("TextButton", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, indent + CONFIG.EntryHeight, 0, 0),
+            Size = UDim2.new(1, -(indent + CONFIG.EntryHeight), 1, 0),
+            Text = "",
+            Parent = entry,
+            ZIndex = 2,
+        })
+
+local lastClickTime = 0
+        local clickCombo = 0
+        local isHolding = false
+        local isDraggingEntry = false
+        local dragStartPos = nil
+
+clickArea.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                local now = tick()
+
+if now - lastClickTime < 0.4 then
+                    clickCombo = clickCombo + 1
+                else
+                    clickCombo = 1
+                end
+                lastClickTime = now
+
+Explorer.Select(node)
+                KatchiExplorer.RefreshExplorer()
+
+task.defer(function()
+                    Properties.SetCurrentInstance(instance)
+                    KatchiExplorer.RefreshProperties()
+                end)
+
+isHolding = true
+                isDraggingEntry = false
+                dragStartPos = input.Position
+
+local holdStart = now
+                task.spawn(function()
+                    while isHolding and not isDraggingEntry do
+                        task.wait(0.05)
+                        if isHolding and not isDraggingEntry and (tick() - holdStart) >= 0.4 then
+
+                            if className == "LocalScript" or className == "ModuleScript" or className == "Script" then
+                                if KatchiExplorer.OpenScriptViewer then
+                                    isHolding = false
+                                    KatchiExplorer.OpenScriptViewer(instance)
+                                end
+                            end
+                            break
+                        end
+                    end
+                end)
+
+if clickCombo >= 2 then
+                    clickCombo = 0
+                    if className == "LocalScript" or className == "ModuleScript" or className == "Script" then
+                        if KatchiExplorer.OpenScriptViewer then
+                            KatchiExplorer.OpenScriptViewer(instance)
+                        end
+                    elseif hasChildren then
+                        Explorer.Toggle(node)
+                        KatchiExplorer.RefreshExplorer()
+                    end
+                end
+            end
+        end)
+
+clickArea.InputChanged:Connect(function(input)
+            if isHolding and not isDraggingEntry and dragStartPos and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStartPos
+                local dist = math.sqrt(delta.X^2 + delta.Y^2)
+                if dist > 8 then
+
+                    isDraggingEntry = true
+                    isHolding = false
+                    KatchiExplorer.StartDrag(instance, input.Position)
+                end
+            end
+        end)
+
+clickArea.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                isHolding = false
+                isDraggingEntry = false
+            end
+        end)
+
+clickArea.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton2 then
+
+                Explorer.Select(node)
+                KatchiExplorer.RefreshExplorer()
+
+local mousePos = UserInputService:GetMouseLocation()
+                if KatchiExplorer.ShowContextMenu then
+                    KatchiExplorer.ShowContextMenu(instance, mousePos)
+                end
+
+task.defer(function()
+                    Properties.SetCurrentInstance(instance)
+                    KatchiExplorer.RefreshProperties()
+                end)
+            end
+        end)
+
+entry.MouseEnter:Connect(function()
+            if not isSelected then
+                UI.Tween(entry, { BackgroundTransparency = 0.85, BackgroundColor3 = CONFIG.Colors.Accent }, 0.1)
+            end
+        end)
+        entry.MouseLeave:Connect(function()
+            if not isSelected then
+                UI.Tween(entry, { BackgroundTransparency = 1 }, 0.1)
+            end
+        end)
+
+        return entry
+    end
+
+    function KatchiExplorer.RefreshExplorer()
+        if not explorerList then return end
+
+for _, child in ipairs(explorerList:GetChildren()) do
+            if child:IsA("Frame") then
+                child:Destroy()
+            end
+        end
+
+local flatTree = Explorer.GetFlatTree()
+
+for i, node in ipairs(flatTree) do
+            local entry = KatchiExplorer.CreateExplorerEntry(node, i)
+            entry.Parent = explorerList
+        end
+
+explorerList.CanvasSize = UDim2.new(0, 0, 0, #flatTree * (CONFIG.EntryHeight + 2) + 8)
+    end
+
+    function KatchiExplorer.CreatePropertyEntry(prop, layoutOrder)
+        local entry = UI.Create("Frame", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+            BackgroundTransparency = layoutOrder % 2 == 0 and 0.5 or 0.7,
+            Size = UDim2.new(1, -8, 0, 22),
+            LayoutOrder = layoutOrder,
+        }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+UI.Create("TextLabel", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 8, 0, 0),
+            Size = UDim2.new(0.4, -8, 1, 0),
+            Font = CONFIG.Font,
+            Text = prop.Name,
+            TextColor3 = CONFIG.Colors.TextSecondary,
+            TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Parent = entry,
+        })
+
+local valueStr = tostring(prop.Value)
+        if #valueStr > 50 then
+            valueStr = valueStr:sub(1, 47) .. "..."
+        end
+
+        local valueColor = CONFIG.Colors.Text
+        if prop.Type == "boolean" then
+            valueColor = prop.Value and CONFIG.Colors.Success or CONFIG.Colors.Error
+        elseif prop.Type == "number" then
+            valueColor = CONFIG.Colors.AccentSecondary
+        elseif prop.Type == "string" then
+            valueColor = CONFIG.Colors.Warning
+        end
+
+local isEditable = prop.Name ~= "ClassName" and prop.Name ~= "Parent"
+
+        local valueBox = UI.Create("TextBox", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = isEditable and 0.8 or 1,
+            BackgroundColor3 = CONFIG.Colors.Background,
+            Position = UDim2.new(0.4, 0, 0, 1),
+            Size = UDim2.new(0.6, -8, 1, -2),
+            Font = CONFIG.FontCode,
+            Text = valueStr,
+            TextColor3 = valueColor,
+            TextSize = 11,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            ClearTextOnFocus = false,
+            TextEditable = isEditable,
+            Parent = entry,
+        }, isEditable and { UI.Corner(CONFIG.CornerRadiusSmall) } or {})
+
+if isEditable then
+            valueBox.FocusLost:Connect(function(enterPressed)
+                if not Properties.CurrentInstance then return end
+
+                local newText = valueBox.Text
+                local newValue = nil
+
+if prop.Type == "boolean" then
+                    newValue = newText:lower() == "true" or newText == "1"
+                elseif prop.Type == "number" then
+                    newValue = tonumber(newText)
+                elseif prop.Type == "string" then
+                    newValue = newText
+                elseif prop.Type == "Vector3" then
+                    local x, y, z = newText:match("([%d%.%-]+)[,%s]+([%d%.%-]+)[,%s]+([%d%.%-]+)")
+                    if x and y and z then
+                        newValue = Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+                    end
+                elseif prop.Type == "Vector2" then
+                    local x, y = newText:match("([%d%.%-]+)[,%s]+([%d%.%-]+)")
+                    if x and y then
+                        newValue = Vector2.new(tonumber(x), tonumber(y))
+                    end
+                elseif prop.Type == "Color3" then
+                    local r, g, b = newText:match("([%d%.]+)[,%s]+([%d%.]+)[,%s]+([%d%.]+)")
+                    if r and g and b then
+                        newValue = Color3.new(tonumber(r), tonumber(g), tonumber(b))
+                    end
+                elseif prop.Type == "UDim2" then
+                    local xs, xo, ys, yo = newText:match("([%d%.%-]+)[,%s]+([%d%.%-]+)[,%s]+([%d%.%-]+)[,%s]+([%d%.%-]+)")
+                    if xs and xo and ys and yo then
+                        newValue = UDim2.new(tonumber(xs), tonumber(xo), tonumber(ys), tonumber(yo))
+                    end
+                elseif prop.Type == "UDim" then
+                    local s, o = newText:match("([%d%.%-]+)[,%s]+([%d%.%-]+)")
+                    if s and o then
+                        newValue = UDim.new(tonumber(s), tonumber(o))
+                    end
+                elseif prop.Type == "BrickColor" then
+                    pcall(function()
+                        newValue = BrickColor.new(newText)
+                    end)
+                elseif prop.Type == "EnumItem" then
+
+                    local enumType, enumValue = newText:match("Enum%.(%w+)%.(%w+)")
+                    if enumType and enumValue then
+                        pcall(function()
+                            newValue = Enum[enumType][enumValue]
+                        end)
+                    end
+                end
+
+if newValue ~= nil then
+                    local success, err = Properties.SetProperty(Properties.CurrentInstance, prop.Name, newValue)
+                    if success then
+
+                        valueBox.TextColor3 = CONFIG.Colors.Success
+                        task.delay(0.3, function()
+                            if valueBox and valueBox.Parent then
+                                valueBox.TextColor3 = valueColor
+                            end
+                        end)
+
+                        task.defer(function()
+                            Properties.SetCurrentInstance(Properties.CurrentInstance)
+                            KatchiExplorer.RefreshProperties()
+                        end)
+                    else
+
+                        valueBox.TextColor3 = CONFIG.Colors.Error
+                        task.delay(0.5, function()
+                            if valueBox and valueBox.Parent then
+                                valueBox.Text = tostring(prop.Value)
+                                valueBox.TextColor3 = valueColor
+                            end
+                        end)
+                    end
+                else
+
+                    valueBox.Text = tostring(prop.Value)
+                end
+            end)
+        end
+
+        return entry
+    end
+
+    function KatchiExplorer.RefreshProperties()
+        if not propertiesList then return end
+
+for _, child in ipairs(propertiesList:GetChildren()) do
+            if child:IsA("Frame") then
+                child:Destroy()
+            end
+        end
+
+        local props = Properties.PropertyList
+
+for i, prop in ipairs(props) do
+            local entry = KatchiExplorer.CreatePropertyEntry(prop, i)
+            entry.Parent = propertiesList
+        end
+
+propertiesList.CanvasSize = UDim2.new(0, 0, 0, #props * 23 + 8)
+    end
+end
+
+do
+    local kickBlocked = 0
+    local hookInstalled = false
+
+pcall(function()
+        if Executor.has("hookfunction") then
+            Executor.hookfunction(Players.LocalPlayer.Kick, Executor.newcclosure(function()
+                kickBlocked = kickBlocked + 1
+                return nil
+            end))
+        end
+    end)
+
+local function SetupCombinedHook()
+        if hookInstalled then return end
+        if not Executor.has("hookmetamethod") then return end
+        if not Executor.has("getnamecallmethod") then return end
+
+        hookInstalled = true
+
+        local blockedRemotes = {
+            ["ReportPlayer"] = true, ["BanPlayer"] = true, ["KickPlayer"] = true,
+            ["LogExploit"] = true, ["DetectedCheat"] = true, ["SecurityViolation"] = true,
+            ["AntiCheat"] = true, ["Report"] = true, ["Flag"] = true,
+            ["Detected"] = true, ["Violation"] = true, ["Exploit"] = true,
+        }
+
+        pcall(function()
+            local oldNamecall
+            oldNamecall = Executor.hookmetamethod(game, "__namecall", Executor.newcclosure(function(self, ...)
+                local method = Executor.getnamecallmethod()
+
+if Executor.has("checkcaller") and Executor.checkcaller() then
+                    return oldNamecall(self, ...)
+                end
+
+if method == "GetChildren" or method == "GetDescendants" then
+                    local results = oldNamecall(self, ...)
+                    if type(results) == "table" then
+                        local filtered = {}
+                        for _, v in ipairs(results) do
+                            if not cloakedInstances[v] then
+                                table.insert(filtered, v)
+                            end
+                        end
+                        return filtered
+                    end
+                    return results
+                end
+
+if method == "FindFirstChild" or method == "FindFirstDescendant" or
+                   method == "FindFirstChildOfClass" or method == "FindFirstChildWhichIsA" or
+                   method == "FindFirstAncestor" or method == "FindFirstAncestorOfClass" or
+                   method == "FindFirstAncestorWhichIsA" then
+                    local result = oldNamecall(self, ...)
+                    if result and cloakedInstances[result] then
+                        return nil
+                    end
+                    return result
+                end
+
+if method == "WaitForChild" then
+                    local args = {...}
+                    local childName = args[1]
+
+                    for inst, _ in pairs(cloakedInstances) do
+                        pcall(function()
+                            if inst.Name == childName then
+
+                                return nil
+                            end
+                        end)
+                    end
+                end
+
+if method == "Kick" and self == LocalPlayer then
+                    kickBlocked = kickBlocked + 1
+                    return nil
+                end
+
+if method == "FireServer" or method == "InvokeServer" then
+                    local remoteName = ""
+                    pcall(function() remoteName = self.Name end)
+
+if blockedRemotes[remoteName] then
+                        return nil
+                    end
+
+local lowerName = remoteName:lower()
+                    if lowerName:find("kick") or lowerName:find("ban") or
+                       lowerName:find("cheat") or lowerName:find("detect") or
+                       lowerName:find("exploit") or lowerName:find("hack") or
+                       lowerName:find("report") or lowerName:find("flag") then
+                        return nil
+                    end
+                end
+
+                return oldNamecall(self, ...)
+            end))
+        end)
+
+        print("   • UI Protection: ACTIVE (namecall hook installed)")
+    end
+
+local function SetupIndexHook()
+        if not Executor.has("hookmetamethod") then return end
+        if not Executor.has("checkcaller") then return end
+
+        pcall(function()
+            local oldIndex
+            oldIndex = Executor.hookmetamethod(game, "__index", Executor.newcclosure(function(self, key)
+
+                if Executor.checkcaller() then
+                    return oldIndex(self, key)
+                end
+
+if cloakedInstances[self] then
+
+                    if key == "Parent" or key == "Name" or key == "ClassName" then
+                        return nil
+                    end
+                end
+
+                return oldIndex(self, key)
+            end))
+        end)
+    end
+
+task.defer(function()
+        task.wait(0.1)
+        SetupCombinedHook()
+        SetupIndexHook()
+    end)
+end
+
+task.defer(function()
+
+    task.wait(0.5)
+    KatchiExplorer.Init()
+end)
+
+_G.KatchiExplorer = KatchiExplorer
+_G.KatchiStealth = Stealth
+_G.KatchiCloaked = cloakedInstances
+_G.KatchiExplorerData = Explorer
+_G.KatchiProperties = Properties
+_G.KatchiScriptViewer = ScriptViewer
+_G.KatchiExecutor = Executor
+
+return KatchiExplorer

@@ -1,0 +1,485 @@
+--[[
+    ██╗  ██╗ █████╗ ████████╗ ██████╗██╗  ██╗██╗ EXPLORER
+    ██║ ██╔╝██╔══██╗╚══██╔══╝██╔════╝██║  ██║██║
+    █████╔╝ ███████║   ██║   ██║     ███████║██║
+    ██╔═██╗ ██╔══██║   ██║   ██║     ██╔══██║██║
+    ██║  ██╗██║  ██║   ██║   ╚██████╗██║  ██║██║
+    ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝
+    
+    MOBILE-OPTIMIZED VERSION
+]]
+
+-- This is a condensed mobile-friendly version
+-- See full comments in original for details
+
+local Executor = {}
+do
+    Executor.hookfunction = hookfunction or hook_function or replaceclosure or nil
+    Executor.hookmetamethod = hookmetamethod or hook_metamethod or nil
+    Executor.newcclosure = newcclosure or newCclosure or function(f) return f end
+    Executor.checkcaller = checkcaller or is_synapse_function or nil
+    Executor.getnamecallmethod = getnamecallmethod or get_namecall_method or nil
+    Executor.gethui = gethui or get_hidden_gui or nil
+    Executor.cloneref = cloneref or clone_ref or function(o) return o end
+    function Executor.has(name) return Executor[name] ~= nil and type(Executor[name]) == "function" end
+end
+
+-- Mobile-optimized config
+local CONFIG = {
+    Colors = {
+        Background = Color3.fromRGB(18, 18, 24),
+        BackgroundSecondary = Color3.fromRGB(25, 25, 35),
+        BackgroundTertiary = Color3.fromRGB(32, 32, 45),
+        Accent = Color3.fromRGB(138, 99, 210),
+        Text = Color3.fromRGB(240, 240, 245),
+        TextMuted = Color3.fromRGB(100, 100, 115),
+        Border = Color3.fromRGB(50, 50, 65),
+        Scrollbar = Color3.fromRGB(60, 60, 80),
+    },
+    Font = Enum.Font.GothamMedium,
+    FontBold = Enum.Font.GothamBold,
+    EntryHeight = 32, -- Increased for touch
+    IndentSize = 12,
+    MinButtonSize = 36, -- Touch-friendly
+}
+
+local function IsMobile()
+    local UIS = game:GetService("UserInputService")
+    return UIS.TouchEnabled and not UIS.KeyboardEnabled
+end
+
+local function GetScreenScale()
+    local viewport = workspace.CurrentCamera.ViewportSize
+    return math.min(viewport.X / 1920, 1)
+end
+
+local Stealth = {}
+local cloakedInstances = setmetatable({}, {__mode = "k"})
+
+function Stealth.GetRandomName()
+    local names = {"RobloxGui", "CoreGui", "PlayerListGui"}
+    return names[math.random(#names)] .. "_" .. math.random(10000, 99999)
+end
+
+function Stealth.CloakInstance(inst)
+    if inst then cloakedInstances[inst] = true end
+end
+
+function Stealth.CreateProtectedGui()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = Stealth.GetRandomName()
+    gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 999999
+    gui.IgnoreGuiInset = true
+    
+    gui.DescendantAdded:Connect(function(desc)
+        task.defer(function() pcall(function() cloakedInstances[desc] = true end) end)
+    end)
+    
+    pcall(function() gui.Parent = game:GetService("CoreGui") end)
+    Stealth.CloakInstance(gui)
+    return gui
+end
+
+function Stealth.GetChildren(parent)
+    local results = {}
+    pcall(function()
+        for _, child in ipairs(parent:GetChildren()) do
+            table.insert(results, child)
+        end
+    end)
+    return results
+end
+
+local KatchiExplorer = {Version = "2.1.0-MOBILE", Visible = false, Initialized = false}
+local Explorer = {TreeList = nil}
+
+local function CreateUICorner(radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = radius or UDim.new(0, 6)
+    return corner
+end
+
+local function CreatePadding(l, r, t, b)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft, pad.PaddingRight = UDim.new(0, l or 0), UDim.new(0, r or 0)
+    pad.PaddingTop, pad.PaddingBottom = UDim.new(0, t or 0), UDim.new(0, b or 0)
+    return pad
+end
+
+function KatchiExplorer.CreateUI()
+    if KatchiExplorer.Gui then pcall(function() KatchiExplorer.Gui:Destroy() end) end
+
+    local screenGui = Stealth.CreateProtectedGui()
+    KatchiExplorer.Gui = screenGui
+    
+    local isMobile = IsMobile()
+    local scale = GetScreenScale()
+    
+    -- Responsive sizing: 95% on mobile, scaled fixed on desktop
+    local mainSize = isMobile and UDim2.new(0.95, 0, 0.85, 0) or UDim2.new(0, 900 * scale, 0, 650 * scale)
+    
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = Stealth.GetRandomName()
+    mainFrame.Size = mainSize
+    mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    mainFrame.BackgroundColor3 = CONFIG.Colors.Background
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Visible = false
+    mainFrame.Parent = screenGui
+    
+    CreateUICorner().Parent = mainFrame
+    Stealth.CloakInstance(mainFrame)
+    KatchiExplorer.MainFrame = mainFrame
+
+    -- Title bar
+    local titleHeight = isMobile and 44 or 36
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, titleHeight)
+    titleBar.BackgroundColor3 = CONFIG.Colors.BackgroundSecondary
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = mainFrame
+    CreatePadding(8, 8, 8, 8).Parent = titleBar
+    Stealth.CloakInstance(titleBar)
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -100, 1, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = CONFIG.FontBold
+    titleLabel.Text = isMobile and "📱 KATCHI" or "KATCHI EXPLORER"
+    titleLabel.TextColor3 = CONFIG.Colors.Text
+    titleLabel.TextSize = isMobile and 16 or 18
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = titleBar
+    Stealth.CloakInstance(titleLabel)
+
+    -- Close button
+    local btnSize = isMobile and 36 or 28
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, btnSize, 0, btnSize)
+    closeBtn.Position = UDim2.new(1, -btnSize - 4, 0.5, 0)
+    closeBtn.AnchorPoint = Vector2.new(0, 0.5)
+    closeBtn.BackgroundColor3 = CONFIG.Colors.BackgroundTertiary
+    closeBtn.BorderSizePixel = 0
+    closeBtn.Text = "✕"
+    closeBtn.TextColor3 = CONFIG.Colors.Text
+    closeBtn.TextSize = isMobile and 18 or 16
+    closeBtn.Parent = titleBar
+    CreateUICorner(UDim.new(0, 4)).Parent = closeBtn
+    Stealth.CloakInstance(closeBtn)
+    closeBtn.Activated:Connect(function() KatchiExplorer.Toggle() end)
+
+    -- Draggable (desktop)
+    if not isMobile then
+        local dragging, dragStart, startPos
+        titleBar.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging, dragStart, startPos = true, input.Position, mainFrame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        game:GetService("UserInputService").InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                local delta = input.Position - dragStart
+                mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                                               startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+    end
+
+    -- Content
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1, 0, 1, -titleHeight)
+    contentFrame.Position = UDim2.new(0, 0, 0, titleHeight)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = mainFrame
+    Stealth.CloakInstance(contentFrame)
+
+    if isMobile then
+        KatchiExplorer.CreateMobileLayout(contentFrame)
+    else
+        KatchiExplorer.CreateDesktopLayout(contentFrame)
+    end
+end
+
+function KatchiExplorer.CreateMobileLayout(parent)
+    -- Tab bar
+    local tabBar = Instance.new("Frame")
+    tabBar.Size = UDim2.new(1, 0, 0, 40)
+    tabBar.BackgroundColor3 = CONFIG.Colors.BackgroundSecondary
+    tabBar.BorderSizePixel = 0
+    tabBar.Parent = parent
+    Stealth.CloakInstance(tabBar)
+    
+    local tabList = Instance.new("UIListLayout")
+    tabList.FillDirection = Enum.FillDirection.Horizontal
+    tabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    tabList.Padding = UDim.new(0, 4)
+    tabList.Parent = tabBar
+    CreatePadding(4, 4, 4, 4).Parent = tabBar
+
+    local tabs = {"Explorer", "Properties"}
+    local tabButtons, tabPanels = {}, {}
+
+    -- Panels
+    for i = 1, 2 do
+        local panel = Instance.new("Frame")
+        panel.Size = UDim2.new(1, 0, 1, -40)
+        panel.Position = UDim2.new(0, 0, 0, 40)
+        panel.BackgroundTransparency = 1
+        panel.Visible = i == 1
+        panel.Parent = parent
+        Stealth.CloakInstance(panel)
+        tabPanels[i] = panel
+    end
+
+    -- Buttons
+    for i, name in ipairs(tabs) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0.48, 0, 1, -8)
+        btn.BackgroundColor3 = i == 1 and CONFIG.Colors.Accent or CONFIG.Colors.BackgroundTertiary
+        btn.BorderSizePixel = 0
+        btn.Font = CONFIG.FontBold
+        btn.Text = name
+        btn.TextColor3 = CONFIG.Colors.Text
+        btn.TextSize = 14
+        btn.TextScaled = true
+        btn.LayoutOrder = i
+        btn.Parent = tabBar
+        CreateUICorner(UDim.new(0, 4)).Parent = btn
+        Stealth.CloakInstance(btn)
+        tabButtons[i] = btn
+        
+        btn.Activated:Connect(function()
+            for j, b in ipairs(tabButtons) do
+                b.BackgroundColor3 = j == i and CONFIG.Colors.Accent or CONFIG.Colors.BackgroundTertiary
+                tabPanels[j].Visible = j == i
+            end
+        end)
+    end
+
+    KatchiExplorer.CreateExplorerPanel(tabPanels[1])
+    KatchiExplorer.CreatePropertiesPanel(tabPanels[2])
+end
+
+function KatchiExplorer.CreateDesktopLayout(parent)
+    local left = Instance.new("Frame")
+    left.Size = UDim2.new(0.6, -2, 1, 0)
+    left.BackgroundTransparency = 1
+    left.Parent = parent
+    Stealth.CloakInstance(left)
+
+    local right = Instance.new("Frame")
+    right.Size = UDim2.new(0.4, -2, 1, 0)
+    right.Position = UDim2.new(0.6, 2, 0, 0)
+    right.BackgroundTransparency = 1
+    right.Parent = parent
+    Stealth.CloakInstance(right)
+
+    KatchiExplorer.CreateExplorerPanel(left)
+    KatchiExplorer.CreatePropertiesPanel(right)
+end
+
+function KatchiExplorer.CreateExplorerPanel(parent)
+    local isMobile = IsMobile()
+    local searchHeight = isMobile and 40 or 32
+    
+    local searchContainer = Instance.new("Frame")
+    searchContainer.Size = UDim2.new(1, 0, 0, searchHeight)
+    searchContainer.BackgroundColor3 = CONFIG.Colors.BackgroundSecondary
+    searchContainer.BorderSizePixel = 0
+    searchContainer.Parent = parent
+    CreatePadding(8, 8, 6, 6).Parent = searchContainer
+    Stealth.CloakInstance(searchContainer)
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1, 0, 1, 0)
+    searchBox.BackgroundColor3 = CONFIG.Colors.BackgroundTertiary
+    searchBox.BorderSizePixel = 0
+    searchBox.Font = CONFIG.Font
+    searchBox.PlaceholderText = "🔍 Search..."
+    searchBox.PlaceholderColor3 = CONFIG.Colors.TextMuted
+    searchBox.Text = ""
+    searchBox.TextColor3 = CONFIG.Colors.Text
+    searchBox.TextSize = isMobile and 14 or 13
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.Parent = searchContainer
+    CreateUICorner(UDim.new(0, 4)).Parent = searchBox
+    CreatePadding(8, 8, 0, 0).Parent = searchBox
+    Stealth.CloakInstance(searchBox)
+
+    local treeScroll = Instance.new("ScrollingFrame")
+    treeScroll.Size = UDim2.new(1, 0, 1, -searchHeight)
+    treeScroll.Position = UDim2.new(0, 0, 0, searchHeight)
+    treeScroll.BackgroundColor3 = CONFIG.Colors.BackgroundSecondary
+    treeScroll.BorderSizePixel = 0
+    treeScroll.ScrollBarThickness = isMobile and 8 or 6
+    treeScroll.ScrollBarImageColor3 = CONFIG.Colors.Scrollbar
+    treeScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    treeScroll.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+    treeScroll.Parent = parent
+    Stealth.CloakInstance(treeScroll)
+
+    local treeList = Instance.new("Frame")
+    treeList.Size = UDim2.new(1, -8, 1, 0)
+    treeList.BackgroundTransparency = 1
+    treeList.Parent = treeScroll
+    Stealth.CloakInstance(treeList)
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 1)
+    layout.Parent = treeList
+
+    Explorer.TreeList = treeList
+    task.defer(function() KatchiExplorer.PopulateTree() end)
+end
+
+function KatchiExplorer.CreatePropertiesPanel(parent)
+    local isMobile = IsMobile()
+    local headerHeight = isMobile and 36 or 28
+    
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, headerHeight)
+    header.BackgroundColor3 = CONFIG.Colors.BackgroundSecondary
+    header.BorderSizePixel = 0
+    header.Parent = parent
+    Stealth.CloakInstance(header)
+
+    local headerLabel = Instance.new("TextLabel")
+    headerLabel.Size = UDim2.new(1, 0, 1, 0)
+    headerLabel.BackgroundTransparency = 1
+    headerLabel.Font = CONFIG.FontBold
+    headerLabel.Text = "Properties"
+    headerLabel.TextColor3 = CONFIG.Colors.Text
+    headerLabel.TextSize = isMobile and 14 or 13
+    headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+    headerLabel.Parent = header
+    CreatePadding(8, 8, 0, 0).Parent = headerLabel
+    Stealth.CloakInstance(headerLabel)
+
+    local propsScroll = Instance.new("ScrollingFrame")
+    propsScroll.Size = UDim2.new(1, 0, 1, -headerHeight)
+    propsScroll.Position = UDim2.new(0, 0, 0, headerHeight)
+    propsScroll.BackgroundColor3 = CONFIG.Colors.BackgroundTertiary
+    propsScroll.BorderSizePixel = 0
+    propsScroll.ScrollBarThickness = isMobile and 8 or 6
+    propsScroll.ScrollBarImageColor3 = CONFIG.Colors.Scrollbar
+    propsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    propsScroll.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+    propsScroll.Parent = parent
+    Stealth.CloakInstance(propsScroll)
+end
+
+function KatchiExplorer.PopulateTree()
+    if not Explorer.TreeList then return end
+
+    local function CreateEntry(instance, depth)
+        local entry = Instance.new("Frame")
+        entry.Size = UDim2.new(1, 0, 0, CONFIG.EntryHeight)
+        entry.BackgroundColor3 = depth % 2 == 0 and CONFIG.Colors.BackgroundSecondary or CONFIG.Colors.BackgroundTertiary
+        entry.BorderSizePixel = 0
+        entry.Parent = Explorer.TreeList
+        Stealth.CloakInstance(entry)
+
+        local indent = depth * CONFIG.IndentSize
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -indent - 24, 1, 0)
+        nameLabel.Position = UDim2.new(0, indent + 24, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Font = CONFIG.Font
+        nameLabel.Text = instance.Name or "?"
+        nameLabel.TextColor3 = CONFIG.Colors.Text
+        nameLabel.TextSize = IsMobile() and 13 or 12
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+        nameLabel.Parent = entry
+        Stealth.CloakInstance(nameLabel)
+    end
+
+    local function AddChildren(parent, depth)
+        depth = depth or 0
+        if depth > 6 then return end
+        local children = Stealth.GetChildren(parent)
+        for _, child in ipairs(children) do
+            CreateEntry(child, depth)
+            if #Stealth.GetChildren(child) > 0 and depth < (IsMobile() and 2 or 3) then
+                AddChildren(child, depth + 1)
+            end
+        end
+    end
+
+    AddChildren(game, 0)
+end
+
+function KatchiExplorer.Toggle()
+    if not KatchiExplorer.MainFrame then return end
+    KatchiExplorer.Visible = not KatchiExplorer.Visible
+    KatchiExplorer.MainFrame.Visible = KatchiExplorer.Visible
+end
+
+function KatchiExplorer.Init()
+    if KatchiExplorer.Initialized then return end
+    KatchiExplorer.Initialized = true
+
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("   KATCHI EXPLORER v" .. KatchiExplorer.Version)
+    print("   " .. (IsMobile() and "📱 MOBILE MODE" or "💻 DESKTOP MODE"))
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    KatchiExplorer.CreateUI()
+    task.wait(0.1)
+    KatchiExplorer.Toggle()
+
+    print("   ✓ UI Initialized")
+    print("   ✓ Layout: " .. (IsMobile() and "Tabbed" or "Side-by-Side"))
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+end
+
+-- Anti-kick
+do
+    pcall(function()
+        if Executor.has("hookfunction") then
+            Executor.hookfunction(game:GetService("Players").LocalPlayer.Kick, 
+                Executor.newcclosure(function() return nil end))
+        end
+    end)
+
+    if Executor.has("hookmetamethod") and Executor.has("getnamecallmethod") then
+        pcall(function()
+            local oldNamecall
+            oldNamecall = Executor.hookmetamethod(game, "__namecall", Executor.newcclosure(function(self, ...)
+                local method = Executor.getnamecallmethod()
+                if method == "GetChildren" or method == "GetDescendants" then
+                    local results = oldNamecall(self, ...)
+                    if type(results) == "table" then
+                        local filtered = {}
+                        for _, v in ipairs(results) do
+                            if not cloakedInstances[v] then table.insert(filtered, v) end
+                        end
+                        return filtered
+                    end
+                    return results
+                end
+                if method == "Kick" and self == game:GetService("Players").LocalPlayer then
+                    return nil
+                end
+                return oldNamecall(self, ...)
+            end))
+        end)
+    end
+end
+
+task.defer(function()
+    task.wait(0.5)
+    KatchiExplorer.Init()
+end)
+
+_G.KatchiExplorer = KatchiExplorer
+_G.KatchiStealth = Stealth
+_G.KatchiCloaked = cloakedInstances
+
+return KatchiExplorer

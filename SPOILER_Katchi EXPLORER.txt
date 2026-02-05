@@ -5,6 +5,7 @@
     ██╔═██╗ ██╔══██║   ██║   ██║     ██╔══██║██║
     ██║  ██╗██║  ██║   ██║   ╚██████╗██║  ██║██║
     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝
+    
 ]]
 
 local Executor = {}
@@ -75,6 +76,11 @@ local CONFIG = {
     DeferredLoading = true,
     BatchSize = 50,
     BatchDelay = 0.03,
+
+    -- Mobile Support Configuration
+    IsMobile = UserInputService:GetPlatform() == Enum.Platform.IOS or UserInputService:GetPlatform() == Enum.Platform.Android,
+    MobileButtonSize = 44,  -- Minimum touch target size (44x44 recommended)
+    MobileUIScale = 0.8,    -- Scale factor for UI on mobile
 }
 
 local Stealth = {}
@@ -294,17 +300,36 @@ do
     end
 
     function UI.HoverEffect(button, hoverColor, normalColor)
-        button.MouseEnter:Connect(function()
-            UI.Tween(button, { BackgroundColor3 = hoverColor }, 0.15)
-        end)
-        button.MouseLeave:Connect(function()
-            UI.Tween(button, { BackgroundColor3 = normalColor }, 0.15)
-        end)
+        -- Desktop hover effect
+        if not CONFIG.IsMobile then
+            button.MouseEnter:Connect(function()
+                UI.Tween(button, { BackgroundColor3 = hoverColor }, 0.15)
+            end)
+            button.MouseLeave:Connect(function()
+                UI.Tween(button, { BackgroundColor3 = normalColor }, 0.15)
+            end)
+        end
+        
+        -- Mobile touch feedback
+        if CONFIG.IsMobile then
+            button.InputBegan:Connect(function(input, gameProcessed)
+                if gameProcessed then return end
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    UI.Tween(button, { BackgroundColor3 = hoverColor }, 0.15)
+                end
+            end)
+            button.InputEnded:Connect(function(input, gameProcessed)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    UI.Tween(button, { BackgroundColor3 = normalColor }, 0.15)
+                end
+            end)
+        end
     end
 
     function UI.Ripple(button)
         button.ClipsDescendants = true
-        button.MouseButton1Click:Connect(function()
+        
+        local function playRipple()
             local ripple = UI.Create("Frame", {
                 Name = Stealth.GetRandomChildName(),
                 AnchorPoint = Vector2.new(0.5, 0.5),
@@ -318,7 +343,53 @@ do
             local size = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 2
             UI.Tween(ripple, { Size = UDim2.new(0, size, 0, size), BackgroundTransparency = 1 }, 0.4)
             task.delay(0.4, function() ripple:Destroy() end)
+        end
+        
+        -- Desktop mouse click
+        button.MouseButton1Click:Connect(function()
+            playRipple()
         end)
+        
+        -- Mobile touch support
+        if CONFIG.IsMobile then
+            button.InputBegan:Connect(function(input, gameProcessed)
+                if gameProcessed then return end
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    playRipple()
+                end
+            end)
+        end
+    end
+    
+    function UI.OnButtonPress(button, callback)
+        -- Handle both mouse clicks and touch input
+        if CONFIG.IsMobile then
+            button.InputBegan:Connect(function(input, gameProcessed)
+                if gameProcessed then return end
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    callback()
+                end
+            end)
+        else
+            button.MouseButton1Click:Connect(callback)
+        end
+    end
+    
+    function UI.GetTouchFriendlySize(width, height)
+        --- Returns adjusted sizes for better touch interaction on mobile
+        if CONFIG.IsMobile then
+            -- Ensure minimum 44x44 touch target
+            return UDim2.new(width.Scale, width.Offset, height.Scale, math.max(height.Offset, CONFIG.MobileButtonSize))
+        end
+        return UDim2.new(width.Scale, width.Offset, height.Scale, height.Offset)
+    end
+    
+    function UI.GetEntryHeight()
+        -- Returns appropriate entry height for current platform
+        if CONFIG.IsMobile then
+            return math.max(CONFIG.EntryHeight, CONFIG.MobileButtonSize)
+        end
+        return CONFIG.EntryHeight
     end
 end
 
@@ -968,7 +1039,15 @@ mainFrame = UI.Create("Frame", {
             AnchorPoint = Vector2.new(0.5, 0.5),
             BackgroundColor3 = CONFIG.Colors.Background,
             Position = UDim2.new(0.5, 0, 0.5, 0),
-            Size = UDim2.new(0, 800, 0, 500),
+            Size = (function()
+                if CONFIG.IsMobile then
+                    -- Use 90% of screen width and 80% of screen height for mobile
+                    return UDim2.new(0.9, 0, 0.8, 0)
+                else
+                    -- Desktop size
+                    return UDim2.new(0, 800, 0, 500)
+                end
+            end)(),
             Parent = mainGui,
         }, {
             UI.Corner(),
@@ -1003,8 +1082,21 @@ UI.Create("Frame", {
 UI.Create("TextLabel", {
             Name = Stealth.GetRandomChildName(),
             BackgroundTransparency = 1,
-            Position = UDim2.new(0, 12, 0, 0),
-            Size = UDim2.new(0, 200, 1, 0),
+            Position = UDim2.new(0, 12, 0, 4),
+            Size = UDim2.new(0, 22, 0, 28),
+            Font = CONFIG.FontBold,
+            Text = "K",
+            TextColor3 = CONFIG.Colors.Accent,
+            TextSize = 20,
+            TextXAlignment = Enum.TextXAlignment.Center,
+            Parent = titleBar,
+        })
+
+UI.Create("TextLabel", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 40, 0, 0),
+            Size = UDim2.new(0, 160, 1, 0),
             Font = CONFIG.FontBold,
             Text = "Katchi Explorer",
             TextColor3 = CONFIG.Colors.Text,
@@ -1033,6 +1125,227 @@ local originalPosition = UDim2.new(0.5, 0, 0.5, 0)
         local minimizedPosition = nil
         local minimizedBar = nil
 
+local settingsPanel = nil
+        local showSettings = false
+
+local settingsBtn = UI.Create("TextButton", {
+            Name = Stealth.GetRandomChildName(),
+            BackgroundColor3 = CONFIG.Colors.AccentSecondary,
+            Size = UDim2.new(0, 24, 0, 24),
+            Font = CONFIG.FontBold,
+            Text = "⚙",
+            TextColor3 = CONFIG.Colors.Text,
+            TextSize = 16,
+            Parent = buttonsFrame,
+        }, { UI.Corner(UDim.new(1, 0)) })
+
+        UI.Ripple(settingsBtn)
+
+local function createSettingsPanel()
+            if settingsPanel then
+                pcall(function() settingsPanel:Destroy() end)
+                settingsPanel = nil
+                return
+            end
+
+            settingsPanel = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                AnchorPoint = Vector2.new(0.5, 0.5),
+                BackgroundColor3 = CONFIG.Colors.Background,
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+                Size = UDim2.new(0, 350, 0, 400),
+                ZIndex = 150,
+                Parent = mainGui,
+            }, { UI.Corner(), UI.Stroke() })
+
+            local settingsTitle = UI.Create("Frame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.BackgroundSecondary,
+                Size = UDim2.new(1, 0, 0, 36),
+                Parent = settingsPanel,
+            }, { UI.Corner() })
+
+            UI.Create("TextLabel", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 12, 0, 0),
+                Size = UDim2.new(1, -48, 1, 0),
+                Font = CONFIG.FontBold,
+                Text = "Settings",
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = settingsTitle,
+            })
+
+            local closeSettingsBtn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Error,
+                Position = UDim2.new(1, -32, 0, 6),
+                Size = UDim2.new(0, 24, 0, 24),
+                Font = CONFIG.FontBold,
+                Text = "×",
+                TextColor3 = CONFIG.Colors.Text,
+                TextSize = 16,
+                Parent = settingsTitle,
+            }, { UI.Corner(UDim.new(1, 0)) })
+
+            UI.OnButtonPress(closeSettingsBtn, function()
+                createSettingsPanel()
+            end)
+
+            local settingsContent = UI.Create("ScrollingFrame", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 0, 0, 36),
+                Size = UDim2.new(1, 0, 1, -36),
+                CanvasSize = UDim2.new(0, 0, 0, 0),
+                ScrollBarThickness = 4,
+                ScrollBarImageColor3 = CONFIG.Colors.Scrollbar,
+                AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                Parent = settingsPanel,
+            }, {
+                UI.Create("UIListLayout", {
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Padding = UDim.new(0, 8),
+                }),
+                UI.Padding(8),
+            })
+
+            local function createSetting(label, defaultValue, callback)
+                local settingFrame = UI.Create("Frame", {
+                    Name = Stealth.GetRandomChildName(),
+                    BackgroundColor3 = CONFIG.Colors.BackgroundTertiary,
+                    BackgroundTransparency = 0.5,
+                    Size = UDim2.new(1, -16, 0, 50),
+                    Parent = settingsContent,
+                }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+                UI.Create("TextLabel", {
+                    Name = Stealth.GetRandomChildName(),
+                    BackgroundTransparency = 1,
+                    Position = UDim2.new(0, 8, 0, 4),
+                    Size = UDim2.new(1, -16, 0, 16),
+                    Font = CONFIG.Font,
+                    Text = label,
+                    TextColor3 = CONFIG.Colors.Text,
+                    TextSize = 12,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Parent = settingFrame,
+                })
+
+                local inputBox = UI.Create("TextBox", {
+                    Name = Stealth.GetRandomChildName(),
+                    BackgroundColor3 = CONFIG.Colors.Background,
+                    Position = UDim2.new(0, 8, 0, 24),
+                    Size = UDim2.new(1, -16, 0, 20),
+                    Font = CONFIG.Font,
+                    Text = tostring(defaultValue),
+                    TextColor3 = CONFIG.Colors.Text,
+                    TextSize = 11,
+                    ClearTextOnFocus = false,
+                    Parent = settingFrame,
+                }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+                inputBox.FocusLost:Connect(function()
+                    callback(inputBox.Text)
+                end)
+
+                return inputBox
+            end
+
+            local currentWidth = mainFrame.Size.X.Offset
+            local currentHeight = mainFrame.Size.Y.Offset
+
+            createSetting("Width (px)", currentWidth, function(value)
+                local num = tonumber(value)
+                if num and num > 200 then
+                    mainFrame.Size = UDim2.new(0, num, mainFrame.Size.Y.Scale, mainFrame.Size.Y.Offset)
+                end
+            end)
+
+            createSetting("Height (px)", currentHeight, function(value)
+                local num = tonumber(value)
+                if num and num > 150 then
+                    mainFrame.Size = UDim2.new(mainFrame.Size.X.Scale, mainFrame.Size.X.Offset, 0, num)
+                end
+            end)
+
+            createSetting("UI Transparency", 0, function(value)
+                local num = tonumber(value)
+                if num and num >= 0 and num <= 1 then
+                    mainFrame.BackgroundTransparency = num
+                    for _, child in ipairs(mainFrame:GetChildren()) do
+                        pcall(function()
+                            if child:IsA("Frame") or child:IsA("ScrollingFrame") then
+                                if child.Name ~= "Corner" and child.Name:sub(1, 5) ~= "UIStroke" then
+                                    child.BackgroundTransparency = math.min(child.BackgroundTransparency + (num * 0.3), 0.9)
+                                end
+                            end
+                        end)
+                    end
+                end
+            end)
+
+            createSetting("Text Size Multiplier", 1, function(value)
+                local num = tonumber(value)
+                if num and num > 0 then
+                    for _, child in ipairs(explorerList:GetDescendants()) do
+                        if child:IsA("TextLabel") or child:IsA("TextButton") then
+                            pcall(function()
+                                child.TextSize = child.TextSize * num
+                            end)
+                        end
+                    end
+                end
+            end)
+
+            local instanceCount = 0
+            pcall(function()
+                for _ in pairs(Explorer.Nodes or {}) do
+                    instanceCount = instanceCount + 1
+                end
+            end)
+
+            local instanceCountLabel = UI.Create("TextLabel", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 8, 0, 0),
+                Size = UDim2.new(1, -16, 0, 20),
+                Font = CONFIG.Font,
+                Text = "Instances: " .. instanceCount,
+                TextColor3 = CONFIG.Colors.TextSecondary,
+                TextSize = 11,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = settingsContent,
+            })
+
+            local resetBtn = UI.Create("TextButton", {
+                Name = Stealth.GetRandomChildName(),
+                BackgroundColor3 = CONFIG.Colors.Warning,
+                Position = UDim2.new(0, 8, 0, 0),
+                Size = UDim2.new(1, -16, 0, 24),
+                Font = CONFIG.FontBold,
+                Text = "Reset to Default",
+                TextColor3 = CONFIG.Colors.Background,
+                TextSize = 11,
+                Parent = settingsContent,
+            }, { UI.Corner(CONFIG.CornerRadiusSmall) })
+
+            UI.OnButtonPress(resetBtn, function()
+                mainFrame.Size = UDim2.new(0, 800, 0, 500)
+                mainFrame.BackgroundTransparency = 0
+                if settingsPanel and settingsPanel.Parent then
+                    settingsPanel:Destroy()
+                    settingsPanel = nil
+                end
+            end)
+        end
+
+        UI.OnButtonPress(settingsBtn, function()
+            createSettingsPanel()
+        end)
+
 local minimizeBtn = UI.Create("TextButton", {
             Name = Stealth.GetRandomChildName(),
             BackgroundColor3 = CONFIG.Colors.Warning,
@@ -1045,7 +1358,7 @@ local minimizeBtn = UI.Create("TextButton", {
         }, { UI.Corner(UDim.new(1, 0)) })
 
         UI.Ripple(minimizeBtn)
-        minimizeBtn.MouseButton1Click:Connect(function()
+        UI.OnButtonPress(minimizeBtn, function()
             isMinimized = true
 
             minimizedPosition = mainFrame.Position
@@ -1231,6 +1544,12 @@ local searchFrame = UI.Create("Frame", {
         searchBox:GetPropertyChangedSignal("Text"):Connect(function()
             Explorer.SearchQuery = searchBox.Text
             KatchiExplorer.RefreshExplorer()
+        end)
+
+        searchBox.FocusLost:Connect(function()
+            if searchBox.Text == "" then
+                Explorer.SearchQuery = ""
+            end
         end)
 
 explorerFrame = UI.Create("Frame", {
@@ -1965,8 +2284,12 @@ local serviceNode = Explorer.CreateNode(child, Explorer.Nodes[game])
 
                         local parent = nil
                         pcall(function() parent = desc.Parent end)
-                        if parent then
+                        
+                        if parent and parent.Parent then
                             local parentNode = Explorer.Nodes[parent]
+                            if not parentNode then
+                                parentNode = Explorer.CreateNode(parent, Explorer.Nodes[parent.Parent] or Explorer.Nodes[game])
+                            end
                             if parentNode then
                                 Explorer.CreateNode(desc, parentNode)
                             end
@@ -1974,12 +2297,12 @@ local serviceNode = Explorer.CreateNode(child, Explorer.Nodes[game])
 
                         processed = processed + 1
                         if processed % BATCH_SIZE == 0 then
-                            task.wait()
+                            task.wait(0.05)
                         end
                     end
                 end
 
-                task.wait()
+                task.wait(0.05)
             end
 
 for _, node in pairs(Explorer.Nodes) do
@@ -2028,9 +2351,10 @@ task.defer(function()
             end)
         end)
 
-        print("[Katchi Explorer v2.1] Loaded!")
+        print("[Katchi Explorer v2.2] Loaded!")
         print("   - Press RightControl to toggle visibility")
         print("   - Right-click for actions, Double-click scripts to view")
+        print("   - Ctrl+C to copy selected path")
         print("   - UI Protection: " .. (Executor.has("hookmetamethod") and "FULL" or "BASIC"))
         print("   - Script Decompile: " .. (ScriptViewer.CanDecompile() and "YES" or "NO"))
 
@@ -2038,6 +2362,34 @@ UserInputService.InputBegan:Connect(function(input, processed)
             if processed then return end
             if input.KeyCode == Enum.KeyCode.RightControl then
                 mainGui.Enabled = not mainGui.Enabled
+            end
+
+            if input.KeyCode == Enum.KeyCode.C and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                if Explorer.Selected and Explorer.Selected.Instance then
+                    local path = {}
+                    local current = Explorer.Selected.Instance
+                    while current and current ~= game do
+                        local name = ""
+                        pcall(function() name = current.Name end)
+                        if name:match("^[%a_][%w_]*$") then
+                            table.insert(path, 1, name)
+                        else
+                            table.insert(path, 1, '["' .. name:gsub('"', '\\"') .. '"]')
+                        end
+                        pcall(function() current = current.Parent end)
+                    end
+                    local pathStr = "game"
+                    for _, part in ipairs(path) do
+                        if part:sub(1, 1) == "[" then
+                            pathStr = pathStr .. part
+                        else
+                            pathStr = pathStr .. "." .. part
+                        end
+                    end
+                    if setclipboard or toclipboard then
+                        pcall(function() (setclipboard or toclipboard)(pathStr) end)
+                    end
+                end
             end
         end)
     end
@@ -2057,7 +2409,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
             Name = tostring(node.Id),
             BackgroundColor3 = isSelected and CONFIG.Colors.Accent or CONFIG.Colors.BackgroundSecondary,
             BackgroundTransparency = isSelected and 0.7 or 1,
-            Size = UDim2.new(1, -8, 0, CONFIG.EntryHeight),
+            Size = UDim2.new(1, -8, 0, UI.GetEntryHeight()),
             LayoutOrder = layoutOrder,
         }, { UI.Corner(CONFIG.CornerRadiusSmall) })
 
@@ -2070,7 +2422,7 @@ if hasChildren then
                 Name = Stealth.GetRandomChildName(),
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, indent, 0, 0),
-                Size = UDim2.new(0, CONFIG.EntryHeight, 0, CONFIG.EntryHeight),
+                Size = UDim2.new(0, UI.GetEntryHeight(), 0, UI.GetEntryHeight()),
                 Font = CONFIG.Font,
                 Text = isExpanded and "v" or ">",
                 TextColor3 = CONFIG.Colors.TextSecondary,
@@ -2078,7 +2430,7 @@ if hasChildren then
                 Parent = entry,
             })
 
-            expandBtn.MouseButton1Click:Connect(function()
+            UI.OnButtonPress(expandBtn, function()
                 Explorer.Toggle(node)
                 KatchiExplorer.RefreshExplorer()
             end)

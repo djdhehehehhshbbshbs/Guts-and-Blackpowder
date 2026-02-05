@@ -1627,8 +1627,10 @@ local minimizeBtn = UI.Create("TextButton", {
             isMinimized = true
 
             minimizedPosition = mainFrame.Position
-            -- Save the current size before minimizing
-            local savedSize = mainFrame.Size
+            -- Save the current ABSOLUTE size before minimizing (handles both Scale and Offset)
+            local absSize = mainFrame.AbsoluteSize
+            local savedWidth = absSize.X
+            local savedHeight = absSize.Y
 
             mainFrame.Visible = false
 
@@ -1646,8 +1648,8 @@ local minimizeBtn = UI.Create("TextButton", {
                 })
                 
                 -- Store savedSize on minimizedBar for later retrieval
-                minimizedBar:SetAttribute("SavedWidth", savedSize.X.Offset)
-                minimizedBar:SetAttribute("SavedHeight", savedSize.Y.Offset)
+                minimizedBar:SetAttribute("SavedWidth", savedWidth)
+                minimizedBar:SetAttribute("SavedHeight", savedHeight)
 
 local dragArea = UI.Create("Frame", {
                     Name = Stealth.GetRandomChildName(),
@@ -1725,9 +1727,9 @@ local openBtn = UI.Create("TextButton", {
                     mainFrame.Size = UDim2.new(0, savedW, 0, savedH)
                 end)
             else
-                -- Update saved size when minimizing again
-                minimizedBar:SetAttribute("SavedWidth", savedSize.X.Offset)
-                minimizedBar:SetAttribute("SavedHeight", savedSize.Y.Offset)
+                -- Update saved size when minimizing again (use absolute size)
+                minimizedBar:SetAttribute("SavedWidth", savedWidth)
+                minimizedBar:SetAttribute("SavedHeight", savedHeight)
                 minimizedBar.Position = minimizedPosition
                 minimizedBar.Visible = true
             end

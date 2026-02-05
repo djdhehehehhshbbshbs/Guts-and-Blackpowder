@@ -262,7 +262,7 @@ pcall(function()
     else
         -- Fallback: try direct service call without cloneref
         local UIS = game:GetService("UserInputService")
-        if UIS and UIS.GetPlatform thena
+        if UIS and UIS.GetPlatform then
             CONFIG.IsMobile = UIS:GetPlatform() == Enum.Platform.IOS or UIS:GetPlatform() == Enum.Platform.Android
         end
     end

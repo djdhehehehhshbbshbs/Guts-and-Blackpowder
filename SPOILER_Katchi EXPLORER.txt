@@ -257,7 +257,15 @@ local LocalPlayer = Players.LocalPlayer
 
 -- Initialize mobile detection now that UserInputService is available
 pcall(function()
-    CONFIG.IsMobile = UserInputService:GetPlatform() == Enum.Platform.IOS or UserInputService:GetPlatform() == Enum.Platform.Android
+    if UserInputService and UserInputService.GetPlatform then
+        CONFIG.IsMobile = UserInputService:GetPlatform() == Enum.Platform.IOS or UserInputService:GetPlatform() == Enum.Platform.Android
+    else
+        -- Fallback: try direct service call without cloneref
+        local UIS = game:GetService("UserInputService")
+        if UIS and UIS.GetPlatform thena
+            CONFIG.IsMobile = UIS:GetPlatform() == Enum.Platform.IOS or UIS:GetPlatform() == Enum.Platform.Android
+        end
+    end
 end)
 
 local UI = {}
@@ -2912,4 +2920,3 @@ _G.KatchiScriptViewer = ScriptViewer
 _G.KatchiExecutor = Executor
 
 return KatchiExplorer
-

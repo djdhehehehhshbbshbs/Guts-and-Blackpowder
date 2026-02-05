@@ -1627,10 +1627,12 @@ local minimizeBtn = UI.Create("TextButton", {
             isMinimized = true
 
             minimizedPosition = mainFrame.Position
+            -- Save the current size before minimizing
+            local savedSize = mainFrame.Size
 
-mainFrame.Visible = false
+            mainFrame.Visible = false
 
-if not minimizedBar or not minimizedBar.Parent then
+            if not minimizedBar or not minimizedBar.Parent then
                 minimizedBar = UI.Create("Frame", {
                     Name = Stealth.GetRandomChildName(),
                     AnchorPoint = Vector2.new(0.5, 0.5),
@@ -1642,6 +1644,10 @@ if not minimizedBar or not minimizedBar.Parent then
                     UI.Corner(),
                     UI.Stroke(),
                 })
+                
+                -- Store savedSize on minimizedBar for later retrieval
+                minimizedBar:SetAttribute("SavedWidth", savedSize.X.Offset)
+                minimizedBar:SetAttribute("SavedHeight", savedSize.Y.Offset)
 
 local dragArea = UI.Create("Frame", {
                     Name = Stealth.GetRandomChildName(),
@@ -1708,16 +1714,20 @@ local openBtn = UI.Create("TextButton", {
                 openBtn.MouseButton1Click:Connect(function()
                     isMinimized = false
 
+                    -- Restore saved size
+                    local savedW = minimizedBar:GetAttribute("SavedWidth") or 800
+                    local savedH = minimizedBar:GetAttribute("SavedHeight") or 500
+
                     minimizedBar.Visible = false
 
-                    mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    mainFrame.Position = minimizedPosition
                     mainFrame.Visible = true
-
-                    mainFrame.Size = UDim2.new(0, 700, 0, 440)
-                    UI.Tween(mainFrame, { Size = UDim2.new(0, 800, 0, 500) }, 0.15)
+                    mainFrame.Size = UDim2.new(0, savedW, 0, savedH)
                 end)
             else
-
+                -- Update saved size when minimizing again
+                minimizedBar:SetAttribute("SavedWidth", savedSize.X.Offset)
+                minimizedBar:SetAttribute("SavedHeight", savedSize.Y.Offset)
                 minimizedBar.Position = minimizedPosition
                 minimizedBar.Visible = true
             end

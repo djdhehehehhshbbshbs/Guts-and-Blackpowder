@@ -77,8 +77,8 @@ local CONFIG = {
     BatchSize = 50,
     BatchDelay = 0.03,
 
-    -- Mobile Support Configuration
-    IsMobile = UserInputService:GetPlatform() == Enum.Platform.IOS or UserInputService:GetPlatform() == Enum.Platform.Android,
+    -- Mobile Support Configuration (set after UserInputService is initialized)
+    IsMobile = false,
     MobileButtonSize = 44,  -- Minimum touch target size (44x44 recommended)
     MobileUIScale = 0.8,    -- Scale factor for UI on mobile
 }
@@ -254,6 +254,11 @@ local RunService = cloneref(game:GetService("RunService"))
 local TextService = cloneref(game:GetService("TextService"))
 local CoreGui = cloneref(game:GetService("CoreGui"))
 local LocalPlayer = Players.LocalPlayer
+
+-- Initialize mobile detection now that UserInputService is available
+pcall(function()
+    CONFIG.IsMobile = UserInputService:GetPlatform() == Enum.Platform.IOS or UserInputService:GetPlatform() == Enum.Platform.Android
+end)
 
 local UI = {}
 do

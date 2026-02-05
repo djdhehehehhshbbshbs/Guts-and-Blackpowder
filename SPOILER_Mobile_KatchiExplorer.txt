@@ -5,14 +5,6 @@
     ██╔═██╗ ██╔══██║   ██║   ██║     ██╔══██║██║
     ██║  ██╗██║  ██║   ██║   ╚██████╗██║  ██║██║
     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝╚═╝
-    
-    Mobile Support Features:
-    - Automatic detection of iOS/Android platforms
-    - Touch input handling for all buttons
-    - Responsive UI scaling (90% width, 80% height on mobile)
-    - Touch-friendly button sizes (minimum 44x44 pixels)
-    - Use UI.OnButtonPress() for cross-platform click handling
-    - Use UI.GetEntryHeight() for touch-friendly list entries
 ]]
 
 local Executor = {}
@@ -85,8 +77,8 @@ local CONFIG = {
     BatchDelay = 0.01,
 
     IsMobile = false,
-    MobileButtonSize = 44,
-    MobileUIScale = 0.8,
+    MobileButtonSize = 32,
+    MobileUIScale = 0.9,
     ShowHighlight = true,
 }
 
@@ -1857,9 +1849,9 @@ explorerFrame = UI.Create("Frame", {
         }, {
             UI.Create("UIListLayout", {
                 SortOrder = Enum.SortOrder.LayoutOrder,
-                Padding = UDim.new(0, 2),
+                Padding = UDim.new(0, CONFIG.IsMobile and 1 or 2),
             }),
-            UI.Padding(4),
+            UI.Padding(CONFIG.IsMobile and 2 or 4),
         })
 
         local loadingOverlay = UI.Create("Frame", {
@@ -2775,16 +2767,16 @@ UserInputService.InputBegan:Connect(function(input, processed)
 
         local indent = node.Depth * CONFIG.IndentSize
 
-if hasChildren then
+        if hasChildren then
             local expandBtn = UI.Create("TextButton", {
-                Name = Stealth.GetRandomChildName(),
+                Name = "ExpandBtn",
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0, indent, 0, 0),
                 Size = UDim2.new(0, UI.GetEntryHeight(), 0, UI.GetEntryHeight()),
                 Font = CONFIG.Font,
-                Text = isExpanded and "v" or ">",
+                Text = isExpanded and "▼" or "▶",
                 TextColor3 = CONFIG.Colors.TextSecondary,
-                TextSize = 10,
+                TextSize = CONFIG.IsMobile and 12 or 10,
                 Parent = entry,
             })
 
@@ -2794,28 +2786,29 @@ if hasChildren then
             end)
         end
 
-local iconLabel = Icons.CreateIcon(className, entry)
-        iconLabel.Position = UDim2.new(0, indent + CONFIG.EntryHeight + 2, 0, 4)
+        local entryH = UI.GetEntryHeight()
+        local iconLabel = Icons.CreateIcon(className, entry)
+        iconLabel.Position = UDim2.new(0, indent + entryH + 2, 0.5, -8)
 
-local nameLabel = UI.Create("TextLabel", {
+        local nameLabel = UI.Create("TextLabel", {
             Name = Stealth.GetRandomChildName(),
             BackgroundTransparency = 1,
-            Position = UDim2.new(0, indent + CONFIG.EntryHeight + 22, 0, 0),
-            Size = UDim2.new(1, -(indent + CONFIG.EntryHeight + 22), 0, CONFIG.EntryHeight),
+            Position = UDim2.new(0, indent + entryH + 22, 0, 0),
+            Size = UDim2.new(1, -(indent + entryH + 22), 1, 0),
             Font = CONFIG.Font,
             Text = name,
             TextColor3 = CONFIG.Colors.Text,
-            TextSize = 13,
+            TextSize = CONFIG.IsMobile and 14 or 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextTruncate = Enum.TextTruncate.AtEnd,
             Parent = entry,
         })
 
-local clickArea = UI.Create("TextButton", {
+        local clickArea = UI.Create("TextButton", {
             Name = Stealth.GetRandomChildName(),
             BackgroundTransparency = 1,
-            Position = UDim2.new(0, indent + CONFIG.EntryHeight, 0, 0),
-            Size = UDim2.new(1, -(indent + CONFIG.EntryHeight), 1, 0),
+            Position = UDim2.new(0, indent + entryH, 0, 0),
+            Size = UDim2.new(1, -(indent + entryH), 1, 0),
             Text = "",
             Parent = entry,
             ZIndex = 2,
@@ -2951,22 +2944,45 @@ entry.MouseEnter:Connect(function()
         end
     end
 
+    local lastFlatTree = {}
+    local isRefreshing = false
+
     function KatchiExplorer.RefreshExplorer()
         if not explorerList then return end
+        if isRefreshing then return end
+        isRefreshing = true
 
         local flatTree = Explorer.GetFlatTree()
+        lastFlatTree = flatTree
+        
         local flatSet = {}
         for _, node in ipairs(flatTree) do
             flatSet[node.Instance] = true
         end
 
+        -- Hide entries not in current tree
         for inst, entry in pairs(cachedEntries) do
             if not flatSet[inst] or not Explorer.Nodes[inst] then
                 entry.Visible = false
             end
         end
 
-        for i, node in ipairs(flatTree) do
+        -- Calculate visible range for virtual scrolling on mobile
+        local entryH = UI.GetEntryHeight()
+        local padding = CONFIG.IsMobile and 1 or 2
+        local scrollPos = explorerList.CanvasPosition.Y
+        local frameHeight = explorerList.AbsoluteSize.Y
+        local startIndex = math.max(1, math.floor(scrollPos / (entryH + padding)) - 5)
+        local endIndex = math.min(#flatTree, math.ceil((scrollPos + frameHeight) / (entryH + padding)) + 10)
+
+        -- On mobile, only create visible entries + buffer; on PC create all
+        local createStart = CONFIG.IsMobile and startIndex or 1
+        local createEnd = CONFIG.IsMobile and endIndex or #flatTree
+
+        for i = createStart, createEnd do
+            local node = flatTree[i]
+            if not node then continue end
+            
             local inst = node.Instance
             local entry = cachedEntries[inst]
 
@@ -3002,8 +3018,27 @@ entry.MouseEnter:Connect(function()
             end
         end
 
-        explorerList.CanvasSize = UDim2.new(0, 0, 0, #flatTree * (CONFIG.EntryHeight + 2) + 8)
+        explorerList.CanvasSize = UDim2.new(0, 0, 0, #flatTree * (entryH + padding) + 8)
+        isRefreshing = false
     end
+
+    -- Connect scroll event to update visible entries on mobile
+    task.defer(function()
+        task.wait(0.5)
+        if explorerList and CONFIG.IsMobile then
+            local scrollDebounce = nil
+            explorerList:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+                if scrollDebounce then return end
+                scrollDebounce = true
+                task.delay(0.1, function()
+                    scrollDebounce = nil
+                    if #lastFlatTree > 0 then
+                        KatchiExplorer.RefreshExplorer()
+                    end
+                end)
+            end)
+        end
+    end)
 
     function KatchiExplorer.ScrollToInstance(inst)
         if not explorerList then return end
